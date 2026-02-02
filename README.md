@@ -1,3 +1,10 @@
+## to log install
+
+https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc
+
+Use this extension to download the cookies in JSON and send it to the bot
+
+
 # Telegram Bot with TypeScript
 
 A Telegram bot built with Node.js, TypeScript, and node-telegram-bot-api.
