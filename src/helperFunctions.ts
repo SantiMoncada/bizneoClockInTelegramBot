@@ -1,5 +1,5 @@
-import { UserData } from ".";
 import { JSDOM } from 'jsdom';
+import { UserData } from './types';
 
 export function parseJsonCookies(json: any) {
   const output = {

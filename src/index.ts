@@ -3,23 +3,8 @@ import { config } from './config.js';
 import { parsePhoenixToken } from './parse-phoenix-token-browser';
 import { error } from 'console';
 import { getCsrfTokes, parseJsonCookies } from './helperFunctions.js';
+import { UserData } from './types.js';
 
-export interface UserData {
-  userId: number,
-  geo: {
-    lat: number,
-    long: number,
-    accuracy: number
-  };
-  cookies: {
-    geo: string;
-    hcmex: string;
-    deviceId: string;
-    domain: string;
-    expires: number;
-  }
-  fakeGeo: number | null
-}
 
 interface UserStore {
   [chatId: number]: UserData;
