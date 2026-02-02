@@ -1,4 +1,3 @@
-
 export interface UserData {
   userId: number,
   geo: {

@@ -4,13 +4,9 @@ import { parsePhoenixToken } from './parse-phoenix-token-browser';
 import { error } from 'console';
 import { getCsrfTokes, parseJsonCookies } from './helperFunctions.js';
 import { UserData } from './types.js';
+import { Database } from './database.js';
 
-
-interface UserStore {
-  [chatId: number]: UserData;
-}
-
-const db: UserStore = {}
+const db = new Database()
 
 // Create bot instance
 const bot = new TelegramBot(config.telegramBotToken, {
@@ -42,7 +38,7 @@ bot.onText(/\/start/, (msg) => {
 bot.onText(/\/clockin/, async (msg, match) => {
   const chatId = msg.chat.id;
 
-  const data = db[chatId]
+  const data = db.getUser(chatId)
   if (!data) {
     bot.sendMessage(chatId, "You have to log in /start");
     return
@@ -85,10 +81,11 @@ bot.onText(/\/clockin/, async (msg, match) => {
 bot.onText(/\/data/, (msg, match) => {
   const chatId = msg.chat.id;
 
-  const data = db[chatId]
+  const data = db.getUser(chatId)
 
   if (!data) {
     bot.sendMessage(chatId, "there is no user data");
+    return
   }
   console.log(parsePhoenixToken(data.cookies.hcmex))
   bot.sendMessage(chatId, JSON.stringify(data));
@@ -142,7 +139,7 @@ bot.on('document', async (msg) => {
 
     }
 
-    db[msg.chat.id] = userData
+    db.addUser(msg.chat.id, userData)
 
     const replymsg = `lat long ${geo.lat.toFixed(6)}, ${geo.long.toFixed(6)}\nhttps://www.google.com/search?q=${geo.lat.toFixed(6)}%2C+${geo.long.toFixed(6)}\n\ndomain ${cookies.domain}\nexpires on ${new Date(cookies.expires).toLocaleString(phoenix?.locale)}`
 
