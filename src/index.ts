@@ -1,10 +1,10 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { config } from './config.js';
 import { parsePhoenixToken } from './parse-phoenix-token-browser';
-import { JSDOM } from 'jsdom';
 import { error } from 'console';
+import { getCsrfTokes, parseJsonCookies } from './helperFunctions.js';
 
-interface UserData {
+export interface UserData {
   userId: number,
   geo: {
     lat: number,
@@ -37,9 +37,7 @@ console.log(`Bot started in ${config.nodeEnv} mode`);
 // Define bot commands
 const botCommands = [
   { command: 'start', description: 'Start the bot and see welcome message' },
-  { command: 'help', description: 'Get help information' },
   { command: 'data', description: 'gets all user data' },
-  { command: 'csrf', description: 'gets the csrf tokens from the web' },
   { command: 'clockin', description: 'clocks in' },
 ];
 
@@ -55,67 +53,7 @@ bot.onText(/\/start/, (msg) => {
   );
 });
 
-// Command: /help
-bot.onText(/\/help/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(
-    chatId,
-    'Available commands:\n\n/start - Start the bot\n/help - Show this help message\n/echo <text> - Echo your message back'
-  );
-});
-
-// Command: /echo
-bot.onText(/\/echo (.+)/, (msg, match) => {
-  const chatId = msg.chat.id;
-  const text = match?.[1];
-
-  if (text) {
-    bot.sendMessage(chatId, text);
-  }
-});
-
-async function getCsrfTokes(data: UserData) {
-  const MINIMAL_REQUEST = {
-    // Only these 3 cookies are actually needed
-    headers: {
-      'Cookie': [
-        '_hcmex_key=' + data.cookies.hcmex,
-        'device_id=' + data.cookies.deviceId,
-        'geo=' + data.cookies.geo
-      ].join('; ')
-    }
-  };
-
-  const response = await fetch(`https://${data.cookies.domain}/`, MINIMAL_REQUEST);
-  const text = await response.text();
-  const dom = new JSDOM(text)
-  const document = dom.window.document
-  const metaCsrf = document.querySelector('meta[name="csrf"]')?.getAttribute('content') || null;
-
-  const chronoResponse = await fetch(`https://${data.cookies.domain}/chrono/${data.userId}/hub_chrono`, MINIMAL_REQUEST);
-  const chronoText = await chronoResponse.text();
-  const chronoDom = new JSDOM(chronoText)
-  const chronoDocument = chronoDom.window.document;
-  const inputCsrf = chronoDocument.querySelector('input[name="_csrf_token"]')?.getAttribute("value") || null;
-
-  return { metaCsrf, inputCsrf }
-}
-
-bot.onText(/\/csrf/, async (msg, match) => {
-  const chatId = msg.chat.id;
-
-  const data = db[chatId]
-  if (!data) {
-    bot.sendMessage(chatId, "You have to log in /start");
-    return
-  }
-
-
-  const { metaCsrf, inputCsrf } = await getCsrfTokes(data)
-
-  bot.sendMessage(chatId, `csrf in header\n${metaCsrf}\n\ncsrf in input\n${inputCsrf}`);
-});
-
+// Command: /clockin
 bot.onText(/\/clockin/, async (msg, match) => {
   const chatId = msg.chat.id;
 
@@ -124,49 +62,39 @@ bot.onText(/\/clockin/, async (msg, match) => {
     bot.sendMessage(chatId, "You have to log in /start");
     return
   }
-
-
   const { metaCsrf, inputCsrf } = await getCsrfTokes(data)
 
-  const response = await fetch(`https://${data.cookies.domain}/chrono`, {
-    method: 'POST',
-    headers: {
-      'Cookie': [
-        '_hcmex_key=' + data.cookies.hcmex,
-        'device_id=' + data.cookies.deviceId,
-        'geo=' + data.cookies.geo,
-      ].join('; '),
-      'content-type': 'application/x-www-form-urlencoded',
-      'x-csrf-token': metaCsrf ? metaCsrf : "",
-      'hx-request': 'true',
-      'hx-target': 'chronometer-wrapper',
-      'hx-trigger': 'chrono-form-hub_chrono',
-      'accept': '*/*',
-      'origin': 'https://' + data.cookies.domain,
-      'referer': 'https://' + data.cookies.domain + "/"
-    },
-    body: new URLSearchParams({
-      '_csrf_token': inputCsrf ? inputCsrf : '',
-      'location_id': '',
-      'user_id': data.userId ? data.userId.toString() : '',
-      'shift_id': ''
-    })
-  });
+  try {
+    const response = await fetch(`https://${data.cookies.domain}/chrono`, {
+      method: 'POST',
+      headers: {
+        'Cookie': [
+          '_hcmex_key=' + data.cookies.hcmex,
+          'device_id=' + data.cookies.deviceId,
+          'geo=' + data.cookies.geo,
+        ].join('; '),
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-csrf-token': metaCsrf ? metaCsrf : "",
+        'hx-request': 'true',
+        'hx-target': 'chronometer-wrapper',
+        'hx-trigger': 'chrono-form-hub_chrono',
+        'accept': '*/*',
+        'origin': 'https://' + data.cookies.domain,
+        'referer': 'https://' + data.cookies.domain + "/"
+      },
+      body: new URLSearchParams({
+        '_csrf_token': inputCsrf ? inputCsrf : '',
+        'location_id': '',
+        'user_id': data.userId ? data.userId.toString() : '',
+        'shift_id': ''
+      })
+    });
 
-  // console.log('\n--- RESPONSE ---');
-  // console.log('Status:', response.status, response.statusText);
-  // console.log('Headers:', Object.fromEntries(response.headers.entries()));
+    bot.sendMessage(chatId, `Clocked in successfully`);
 
-  // const body = await response.text();
-  // console.log('\n--- RESPONSE BODY ---');
-  // console.log('Length:', body.length);
-  // console.log('First 1000 chars:\n', body.slice(0, 1000));
-  // console.log('Contains "error":', body.toLowerCase().includes('error'));
-  // console.log('Contains "success":', body.toLowerCase().includes('success'));
-  // console.log('Contains "csrf":', body.toLowerCase().includes('csrf'));
-
-
-  bot.sendMessage(chatId, `csrf in header\n${metaCsrf}\n\ncsrf in input\n${inputCsrf}`);
+  } catch (error) {
+    bot.sendMessage(chatId, `ERROR Clockin in ${error}`);
+  }
 });
 
 bot.onText(/\/data/, (msg, match) => {
@@ -180,7 +108,7 @@ bot.onText(/\/data/, (msg, match) => {
   console.log(parsePhoenixToken(data.cookies.hcmex))
   bot.sendMessage(chatId, JSON.stringify(data));
 });
-// Handle JSON file uploads
+
 bot.on('document', async (msg) => {
   const chatId = msg.chat.id;
   const document = msg.document;
@@ -243,32 +171,6 @@ bot.on('document', async (msg) => {
   }
 });
 
-function parseJsonCookies(json: any) {
-  const output = {
-    geo: "",
-    hcmex: "",
-    deviceId: "",
-    domain: "",
-    expires: 0
-  }
-
-  for (const item of json) {
-    switch (item.name) {
-      case "geo":
-        output.geo = item.value
-        break;
-      case "_hcmex_key":
-        output.hcmex = item.value
-        output.domain = item.domain
-        output.expires = parseFloat(item.expirationDate) * 1000
-        break;
-      case "device_id":
-        output.deviceId = item.value
-        break;
-    }
-  }
-  return output
-}
 
 // Handle all text messages
 bot.on('message', (msg) => {
