@@ -1,7 +1,3 @@
-/**
- * Browser-compatible Phoenix token parser
- * Works with both Node.js and browsers
- */
 
 interface PhoenixToken {
   _csrf_token?: string;

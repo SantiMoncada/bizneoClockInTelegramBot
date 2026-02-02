@@ -40,6 +40,7 @@ const botCommands = [
   { command: 'help', description: 'Get help information' },
   { command: 'data', description: 'gets all user data' },
   { command: 'csrf', description: 'gets the csrf tokens from the web' },
+  { command: 'clockin', description: 'clocks in' },
 ];
 
 // Set bot commands in Telegram
@@ -80,7 +81,7 @@ async function getCsrfTokes(data: UserData) {
       'Cookie': [
         '_hcmex_key=' + data.cookies.hcmex,
         'device_id=' + data.cookies.deviceId,
-        'geo=data.cookies.geo'
+        'geo=' + data.cookies.geo
       ].join('; ')
     }
   };
@@ -115,6 +116,58 @@ bot.onText(/\/csrf/, async (msg, match) => {
   bot.sendMessage(chatId, `csrf in header\n${metaCsrf}\n\ncsrf in input\n${inputCsrf}`);
 });
 
+bot.onText(/\/clockin/, async (msg, match) => {
+  const chatId = msg.chat.id;
+
+  const data = db[chatId]
+  if (!data) {
+    bot.sendMessage(chatId, "You have to log in /start");
+    return
+  }
+
+
+  const { metaCsrf, inputCsrf } = await getCsrfTokes(data)
+
+  const response = await fetch(`https://${data.cookies.domain}/chrono`, {
+    method: 'POST',
+    headers: {
+      'Cookie': [
+        '_hcmex_key=' + data.cookies.hcmex,
+        'device_id=' + data.cookies.deviceId,
+        'geo=' + data.cookies.geo,
+      ].join('; '),
+      'content-type': 'application/x-www-form-urlencoded',
+      'x-csrf-token': metaCsrf ? metaCsrf : "",
+      'hx-request': 'true',
+      'hx-target': 'chronometer-wrapper',
+      'hx-trigger': 'chrono-form-hub_chrono',
+      'accept': '*/*',
+      'origin': 'https://' + data.cookies.domain,
+      'referer': 'https://' + data.cookies.domain + "/"
+    },
+    body: new URLSearchParams({
+      '_csrf_token': inputCsrf ? inputCsrf : '',
+      'location_id': '',
+      'user_id': data.userId ? data.userId.toString() : '',
+      'shift_id': ''
+    })
+  });
+
+  // console.log('\n--- RESPONSE ---');
+  // console.log('Status:', response.status, response.statusText);
+  // console.log('Headers:', Object.fromEntries(response.headers.entries()));
+
+  // const body = await response.text();
+  // console.log('\n--- RESPONSE BODY ---');
+  // console.log('Length:', body.length);
+  // console.log('First 1000 chars:\n', body.slice(0, 1000));
+  // console.log('Contains "error":', body.toLowerCase().includes('error'));
+  // console.log('Contains "success":', body.toLowerCase().includes('success'));
+  // console.log('Contains "csrf":', body.toLowerCase().includes('csrf'));
+
+
+  bot.sendMessage(chatId, `csrf in header\n${metaCsrf}\n\ncsrf in input\n${inputCsrf}`);
+});
 
 bot.onText(/\/data/, (msg, match) => {
   const chatId = msg.chat.id;
