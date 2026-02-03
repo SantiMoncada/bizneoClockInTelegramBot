@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import path from "path";
 import { randomUUID } from "crypto";
+import { resolveDataPath } from "./config.js";
 
 export type ScheduledTask = {
   id: string;
@@ -22,8 +24,10 @@ export class SchedulerStore {
   schedules: ScheduledTask[] = [];
   private filePath: string;
 
-  constructor(filePath = "scheduledTasks.json") {
+  constructor(filePath = resolveDataPath("scheduledTasks.json")) {
     this.filePath = filePath;
+    const dir = path.dirname(this.filePath);
+    mkdirSync(dir, { recursive: true });
     this.loadFromDisk();
   }
 

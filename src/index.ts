@@ -253,6 +253,7 @@ const bot = new TelegramBot(config.telegramBotToken, {
 console.log(`Bot started in ${config.nodeEnv} mode`);
 console.log(`PORT=${config.port}`);
 console.log(`WEBHOOK_URL=${config.webhookUrl ?? 'not set'}`);
+console.log(`DATA_DIR=${config.dataDir}`);
 
 // Define bot commands (EN + ES)
 const botCommandsEn = [
