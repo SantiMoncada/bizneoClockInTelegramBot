@@ -7,6 +7,7 @@ export type ScheduledTask = {
   id: string;
   userId: number;
   lang: 'en' | 'es';
+  locale: string;
   scheduledTime: Date;
   createdAt: Date;
   executedAt?: Date;
@@ -44,17 +45,19 @@ export class SchedulerStore {
     return {
       ...task,
       lang: task.lang ?? 'en',
+      locale: task.locale ?? 'en',
       scheduledTime: new Date(task.scheduledTime),
       createdAt: new Date(task.createdAt),
       executedAt: task.executedAt ? new Date(task.executedAt) : undefined,
     };
   }
 
-  add(userId: number, scheduledTime: Date, lang: 'en' | 'es' = 'en'): ScheduledTask {
+  add(userId: number, scheduledTime: Date, lang: 'en' | 'es' = 'en', locale: string = 'en'): ScheduledTask {
     const task: ScheduledTask = {
       id: randomUUID(),
       userId,
       lang,
+      locale,
       scheduledTime,
       createdAt: new Date(),
       status: 'pending',

@@ -14,6 +14,7 @@ const scheduler = new SchedulerStore()
 let isRunningSchedule = false;
 
 type Lang = 'en' | 'es';
+type Locale = string;
 
 const I18N = {
   en: {
@@ -123,6 +124,10 @@ function getLangFromMessage(msg: TelegramBot.Message): Lang {
   return code.startsWith('es') ? 'es' : 'en';
 }
 
+function getLocaleFromMessage(msg: TelegramBot.Message): Locale {
+  return msg.from?.language_code ?? 'en';
+}
+
 function formatTemplate(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => String(vars[key] ?? ''));
 }
@@ -159,9 +164,9 @@ function nextOccurrence(hours: number, minutes: number, now = new Date()): Date 
   return scheduled;
 }
 
-function formatScheduleTime(date: Date, lang: Lang): string {
-  const locale = lang === 'es' ? 'es-ES' : 'en-US';
-  return date.toLocaleString(locale, {
+function formatScheduleTime(date: Date, locale: Locale): string {
+  const safeLocale = locale || 'en';
+  return date.toLocaleString(safeLocale, {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
@@ -171,7 +176,7 @@ function formatScheduleTime(date: Date, lang: Lang): string {
   });
 }
 
-async function performClockIn(chatId: number, data: UserData, lang: Lang, scheduledAt?: Date) {
+async function performClockIn(chatId: number, data: UserData, lang: Lang, locale: Locale, scheduledAt?: Date) {
   const { metaCsrf, inputCsrf } = await getCsrfTokes(data)
 
   const response = await fetch(`https://${data.cookies.domain}/chrono`, {
@@ -204,7 +209,7 @@ async function performClockIn(chatId: number, data: UserData, lang: Lang, schedu
   }
 
   if (scheduledAt) {
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].clockedInScheduled, { time: formatScheduleTime(new Date(), lang) }));
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].clockedInScheduled, { time: formatScheduleTime(scheduledAt, locale) }));
   } else {
     bot.sendMessage(chatId, I18N[lang].clockedInNow);
   }
@@ -223,7 +228,7 @@ async function runScheduledTasks() {
         continue;
       }
       try {
-        await performClockIn(task.userId, data, task.lang, task.scheduledTime);
+        await performClockIn(task.userId, data, task.lang, task.locale ?? 'en', task.scheduledTime);
         scheduler.markExecuted(task.id);
       } catch (error) {
         scheduler.markExecuted(task.id, error instanceof Error ? error.message : String(error));
@@ -351,6 +356,7 @@ bot.onText(/\/start/, (msg) => {
 bot.onText(/\/clocknow/, async (msg, match) => {
   const chatId = msg.chat.id;
   const lang = getLangFromMessage(msg);
+  const locale = getLocaleFromMessage(msg);
 
   const data = db.getUser(chatId)
   if (!data) {
@@ -358,7 +364,7 @@ bot.onText(/\/clocknow/, async (msg, match) => {
     return
   }
   try {
-    await performClockIn(chatId, data, lang);
+    await performClockIn(chatId, data, lang, locale);
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     bot.sendMessage(chatId, formatTemplate(I18N[lang].clocknowError, { error: errMsg }));
@@ -368,6 +374,7 @@ bot.onText(/\/clocknow/, async (msg, match) => {
 bot.onText(/\/clockin(?:\s+(.+))?/, (msg, match) => {
   const chatId = msg.chat.id;
   const lang = getLangFromMessage(msg);
+  const locale = getLocaleFromMessage(msg);
   const rawInput = match?.[1]?.trim();
 
   if (!rawInput) {
@@ -388,17 +395,18 @@ bot.onText(/\/clockin(?:\s+(.+))?/, (msg, match) => {
   }
 
   const scheduledTime = nextOccurrence(parsed.hours, parsed.minutes);
-  const task = scheduler.add(chatId, scheduledTime, lang);
+  const task = scheduler.add(chatId, scheduledTime, lang, locale);
 
   bot.sendMessage(
     chatId,
-    formatTemplate(I18N[lang].scheduledClockin, { time: formatScheduleTime(scheduledTime, lang), id: task.id })
+    formatTemplate(I18N[lang].scheduledClockin, { time: formatScheduleTime(scheduledTime, locale), id: task.id })
   );
 });
 
 bot.onText(/\/list/, (msg) => {
   const chatId = msg.chat.id;
   const lang = getLangFromMessage(msg);
+  const locale = getLocaleFromMessage(msg);
   const tasks = scheduler.getByUser(chatId);
 
   if (tasks.length === 0) {
@@ -413,7 +421,8 @@ bot.onText(/\/list/, (msg) => {
       : task.status === 'executed'
         ? I18N[lang].statusExecuted
         : I18N[lang].statusFailed;
-    return `${statusEmoji} ${task.id} — ${formatScheduleTime(task.scheduledTime, lang)} (${statusLabel})`;
+    const timeLocale = task.locale ?? locale;
+    return `${statusEmoji} ${task.id} — ${formatScheduleTime(task.scheduledTime, timeLocale)} (${statusLabel})`;
   });
 
   bot.sendMessage(chatId, `${I18N[lang].listHeader}\n\n${lines.join('\n')}`);
@@ -461,6 +470,7 @@ bot.onText(/\/cancel(?:\s+(.+))?/, (msg, match) => {
 bot.onText(/\/data/, (msg, match) => {
   const chatId = msg.chat.id;
   const lang = getLangFromMessage(msg);
+  const locale = getLocaleFromMessage(msg);
 
   const data = db.getUser(chatId)
 
@@ -489,7 +499,7 @@ bot.onText(/\/data/, (msg, match) => {
     formatTemplate(I18N[lang].dataCookieDevice, { status: deviceStatus }),
     formatTemplate(I18N[lang].dataCookieGeo, { status: geoStatus }),
     formatTemplate(I18N[lang].dataExpires, {
-      expires: new Date(data.cookies.expires).toLocaleString(lang === 'es' ? 'es-ES' : 'en-US'),
+      expires: new Date(data.cookies.expires).toLocaleString(locale),
     }),
   ].join('\n');
   bot.sendMessage(chatId, reply);
@@ -513,6 +523,7 @@ bot.onText(/\/location/, (msg) => {
 bot.on('document', async (msg) => {
   const chatId = msg.chat.id;
   const lang = getLangFromMessage(msg);
+  const locale = getLocaleFromMessage(msg);
   const document = msg.document;
 
   if (!document?.file_name?.endsWith('.json')) {
@@ -566,7 +577,7 @@ bot.on('document', async (msg) => {
       long: geo.long.toFixed(6),
       link,
       domain: cookies.domain,
-      expires: new Date(cookies.expires).toLocaleString(lang === 'es' ? 'es-ES' : 'en-US'),
+      expires: new Date(cookies.expires).toLocaleString(locale),
     });
 
     bot.sendMessage(chatId, formatTemplate(I18N[lang].docParsed, { details: replymsg }), {
