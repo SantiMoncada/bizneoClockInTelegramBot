@@ -241,12 +241,9 @@ async function runScheduledTasks() {
   isRunningSchedule = true;
   try {
     const now = new Date();
-    console.log(scheduler.getPending())
     const pending = scheduler.getPending().filter((task) => {
-      console.log(task.scheduledTime.getTime(), now.getTime())
       return task.scheduledTime.getTime() <= now.getTime()
     });
-    console.log(pending)
     for (const task of pending) {
       const data = db.getUser(task.userId);
       if (!data) {
@@ -511,7 +508,6 @@ bot.onText(/\/data/, (msg, match) => {
     bot.sendMessage(chatId, I18N[lang].dataEmpty);
     return
   }
-  console.log(parsePhoenixToken(data.cookies.hcmex))
   const statusSet = I18N[lang].statusSet;
   const statusMissing = I18N[lang].statusMissing;
   const hcmexStatus = data.cookies.hcmex ? statusSet : statusMissing;
