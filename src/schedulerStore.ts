@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 export type ScheduledTask = {
   id: string;
   userId: number;
+  lang: 'en' | 'es';
   scheduledTime: Date;
   createdAt: Date;
   executedAt?: Date;
@@ -38,16 +39,18 @@ export class SchedulerStore {
   private fromSerializable(task: SerializedTask): ScheduledTask {
     return {
       ...task,
+      lang: task.lang ?? 'en',
       scheduledTime: new Date(task.scheduledTime),
       createdAt: new Date(task.createdAt),
       executedAt: task.executedAt ? new Date(task.executedAt) : undefined,
     };
   }
 
-  add(userId: number, scheduledTime: Date): ScheduledTask {
+  add(userId: number, scheduledTime: Date, lang: 'en' | 'es' = 'en'): ScheduledTask {
     const task: ScheduledTask = {
       id: randomUUID(),
       userId,
+      lang,
       scheduledTime,
       createdAt: new Date(),
       status: 'pending',

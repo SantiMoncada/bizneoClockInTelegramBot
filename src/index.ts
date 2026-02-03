@@ -12,6 +12,120 @@ const scheduler = new SchedulerStore()
 
 let isRunningSchedule = false;
 
+type Lang = 'en' | 'es';
+
+const I18N = {
+  en: {
+    commands: {
+      start: 'Get setup instructions and login steps',
+      data: 'Show your saved account info',
+      clocknow: 'Clock in right now',
+      clockin: 'Schedule a future clock-in time',
+      list: 'List your scheduled clock-ins',
+      cancel: 'Cancel a scheduled clock-in',
+      location: 'Show your saved location link',
+    },
+    start: 'Welcome! 👋\n\nHere is how to get started:\n1) Install the Chrome extension: https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\n2) Export your cookies as a JSON file\n3) Send the JSON file to me using Telegram Web: https://web.telegram.org/\n\nAfter you are logged in, you can update your location anytime by sending a location from the Telegram location picker 📍',
+    loginRequired: 'You have to log in /start 🔐',
+    usageClockin: 'Usage: /clockin 14:00 or /clockin 5pm or /clockin 5:20pm ⏰',
+    invalidClockin: 'Invalid time format 😅 Try /clockin 14:00, /clockin 5pm, or /clockin 5:20pm',
+    scheduledClockin: '✅ Scheduled clock-in 🎉\nTime: {time}\nTask ID: {id}',
+    clockedInNow: 'Clocked in successfully ✅',
+    clockedInScheduled: '✅ Clocked in (scheduled) 🎯\nTime: {time}',
+    scheduledFailed: '❌ Scheduled clock-in failed: {error}',
+    clocknowError: '❌ Error: {error}',
+    listHeader: 'Here are your scheduled clock-ins 📋',
+    listEmpty: 'No scheduled clock-ins yet 💤',
+    statusPending: 'pending',
+    statusExecuted: 'executed',
+    statusFailed: 'failed',
+    cancelUsage: 'Usage: /cancel <task-id> or /cancel all 🧹',
+    cancelNotFound: "I can't find that task id for you 🤔",
+    cancelOk: 'Cancelled ✅\nTask ID: {id}',
+    cancelAllNone: 'No pending tasks to cancel 💤',
+    cancelAllOk: 'Cancelled {count} task(s) ✅🧹',
+    cancelFail: "Couldn't cancel that task 😬",
+    dataEmpty: 'There is no user data 🫥',
+    dataHeader: '🧾 User data',
+    dataUserId: '🆔 User ID: {userId}',
+    dataLocation: '📍 Location: {lat}, {long} (accuracy {accuracy})',
+    dataDomain: '🏢 Domain: {domain}',
+    dataCookies: '🍪 Cookies:',
+    dataCookieHcmex: '- _hcmex_key: {status}',
+    dataCookieDevice: '- device_id: {status}',
+    dataCookieGeo: '- geo: {status}',
+    dataExpires: '⏳ Expires: {expires}',
+    statusSet: 'set',
+    statusMissing: 'missing',
+    docInvalid: 'Please send a .json file',
+    docTooLarge: 'File too large. Max 5MB.',
+    docParsed: '✅ Parsed successfully!\n\n{details}',
+    docError: '❌ Error: {error}',
+    docDetails: 'lat long {lat}, {long}\n{link}\n\ndomain {domain}\nexpires on {expires}',
+    docInvalidJson: 'Invalid JSON',
+    locationUpdated: '📍 Location updated!\n{link}',
+  },
+  es: {
+    commands: {
+      start: 'Ver instrucciones de inicio y acceso',
+      data: 'Mostrar tu informacion guardada',
+      clocknow: 'Fichar ahora mismo',
+      clockin: 'Programar un fichaje',
+      list: 'Ver fichajes programados',
+      cancel: 'Cancelar un fichaje programado',
+      location: 'Mostrar enlace de ubicacion guardada',
+    },
+    start: 'Bienvenido! 👋\n\nComo empezar:\n1) Instala la extension de Chrome: https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\n2) Exporta tus cookies como archivo JSON\n3) Enviame el JSON usando Telegram Web: https://web.telegram.org/\n\nDespues de iniciar sesion, puedes actualizar tu ubicacion enviando una ubicacion desde el selector de Telegram 📍',
+    loginRequired: 'Tienes que iniciar sesion con /start 🔐',
+    usageClockin: 'Uso: /clockin 14:00 o /clockin 5pm o /clockin 5:20pm ⏰',
+    invalidClockin: 'Formato de hora invalido 😅 Prueba /clockin 14:00, /clockin 5pm, o /clockin 5:20pm',
+    scheduledClockin: '✅ Fichaje programado 🎉\nHora: {time}\nID de tarea: {id}',
+    clockedInNow: 'Fichado correctamente ✅',
+    clockedInScheduled: '✅ Fichado (programado) 🎯\nHora: {time}',
+    scheduledFailed: '❌ Fallo el fichaje programado: {error}',
+    clocknowError: '❌ Error: {error}',
+    listHeader: 'Estos son tus fichajes programados 📋',
+    listEmpty: 'No hay fichajes programados 💤',
+    statusPending: 'pendiente',
+    statusExecuted: 'ejecutado',
+    statusFailed: 'fallido',
+    cancelUsage: 'Uso: /cancel <task-id> o /cancel all 🧹',
+    cancelNotFound: 'No encuentro ese id de tarea 🤔',
+    cancelOk: 'Cancelado ✅\nID de tarea: {id}',
+    cancelAllNone: 'No hay tareas pendientes para cancelar 💤',
+    cancelAllOk: 'Canceladas {count} tarea(s) ✅🧹',
+    cancelFail: 'No pude cancelar esa tarea 😬',
+    dataEmpty: 'No hay datos de usuario 🫥',
+    dataHeader: '🧾 Datos de usuario',
+    dataUserId: '🆔 ID de usuario: {userId}',
+    dataLocation: '📍 Ubicacion: {lat}, {long} (precision {accuracy})',
+    dataDomain: '🏢 Dominio: {domain}',
+    dataCookies: '🍪 Cookies:',
+    dataCookieHcmex: '- _hcmex_key: {status}',
+    dataCookieDevice: '- device_id: {status}',
+    dataCookieGeo: '- geo: {status}',
+    dataExpires: '⏳ Expira: {expires}',
+    statusSet: 'ok',
+    statusMissing: 'falta',
+    docInvalid: 'Por favor envia un archivo .json',
+    docTooLarge: 'Archivo demasiado grande. Maximo 5MB.',
+    docParsed: '✅ Parseado correctamente!\n\n{details}',
+    docError: '❌ Error: {error}',
+    docDetails: 'lat long {lat}, {long}\n{link}\n\ndominio {domain}\nexpira el {expires}',
+    docInvalidJson: 'JSON invalido',
+    locationUpdated: '📍 Ubicacion actualizada!\n{link}',
+  },
+} as const;
+
+function getLangFromMessage(msg: TelegramBot.Message): Lang {
+  const code = msg.from?.language_code?.toLowerCase() ?? 'en';
+  return code.startsWith('es') ? 'es' : 'en';
+}
+
+function formatTemplate(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(vars[key] ?? ''));
+}
+
 function parseClockTime(input: string): { hours: number; minutes: number } | null {
   const trimmed = input.trim().toLowerCase().replace(/\s+/g, '');
   const match = /^(\d{1,2})(?::(\d{2}))?(am|pm)?$/.exec(trimmed);
@@ -44,8 +158,9 @@ function nextOccurrence(hours: number, minutes: number, now = new Date()): Date 
   return scheduled;
 }
 
-function formatScheduleTime(date: Date): string {
-  return date.toLocaleString(undefined, {
+function formatScheduleTime(date: Date, lang: Lang): string {
+  const locale = lang === 'es' ? 'es-ES' : 'en-US';
+  return date.toLocaleString(locale, {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
@@ -55,7 +170,7 @@ function formatScheduleTime(date: Date): string {
   });
 }
 
-async function performClockIn(chatId: number, data: UserData, scheduledAt?: Date) {
+async function performClockIn(chatId: number, data: UserData, lang: Lang, scheduledAt?: Date) {
   const { metaCsrf, inputCsrf } = await getCsrfTokes(data)
 
   const response = await fetch(`https://${data.cookies.domain}/chrono`, {
@@ -88,9 +203,9 @@ async function performClockIn(chatId: number, data: UserData, scheduledAt?: Date
   }
 
   if (scheduledAt) {
-    bot.sendMessage(chatId, `✅ Clocked in (scheduled) 🎯\nTime: ${formatScheduleTime(new Date())}`);
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].clockedInScheduled, { time: formatScheduleTime(new Date(), lang) }));
   } else {
-    bot.sendMessage(chatId, `Clocked in successfully ✅`);
+    bot.sendMessage(chatId, I18N[lang].clockedInNow);
   }
 }
 
@@ -107,11 +222,12 @@ async function runScheduledTasks() {
         continue;
       }
       try {
-        await performClockIn(task.userId, data, task.scheduledTime);
+        await performClockIn(task.userId, data, task.lang, task.scheduledTime);
         scheduler.markExecuted(task.id);
       } catch (error) {
         scheduler.markExecuted(task.id, error instanceof Error ? error.message : String(error));
-        bot.sendMessage(task.userId, `❌ Scheduled clock-in failed: ${error instanceof Error ? error.message : String(error)}`);
+        const errMsg = error instanceof Error ? error.message : String(error);
+        bot.sendMessage(task.userId, formatTemplate(I18N[task.lang].scheduledFailed, { error: errMsg }));
       }
     }
   } finally {
@@ -126,97 +242,119 @@ const bot = new TelegramBot(config.telegramBotToken, {
 
 console.log(`Bot started in ${config.nodeEnv} mode`);
 
-// Define bot commands
-const botCommands = [
-  { command: 'start', description: 'Get setup instructions and login steps' },
-  { command: 'data', description: 'Show your saved account info' },
-  { command: 'clocknow', description: 'Clock in right now' },
-  { command: 'clockin', description: 'Schedule a future clock-in time' },
-  { command: 'list', description: 'List your scheduled clock-ins' },
-  { command: 'cancel', description: 'Cancel a scheduled clock-in' },
-  { command: 'location', description: 'Show your saved location link' },
+// Define bot commands (EN + ES)
+const botCommandsEn = [
+  { command: 'start', description: I18N.en.commands.start },
+  { command: 'data', description: I18N.en.commands.data },
+  { command: 'clocknow', description: I18N.en.commands.clocknow },
+  { command: 'clockin', description: I18N.en.commands.clockin },
+  { command: 'list', description: I18N.en.commands.list },
+  { command: 'cancel', description: I18N.en.commands.cancel },
+  { command: 'location', description: I18N.en.commands.location },
+];
+
+const botCommandsEs = [
+  { command: 'start', description: I18N.es.commands.start },
+  { command: 'data', description: I18N.es.commands.data },
+  { command: 'clocknow', description: I18N.es.commands.clocknow },
+  { command: 'clockin', description: I18N.es.commands.clockin },
+  { command: 'list', description: I18N.es.commands.list },
+  { command: 'cancel', description: I18N.es.commands.cancel },
+  { command: 'location', description: I18N.es.commands.location },
 ];
 
 // Set bot commands in Telegram
-bot.setMyCommands(botCommands).catch(console.error);
+bot.setMyCommands(botCommandsEn).catch(console.error);
+bot.setMyCommands(botCommandsEs, { language_code: 'es' }).catch(console.error);
 
 // Command: /start
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
   bot.sendMessage(
     chatId,
-    'Welcome! 👋\n\nHere is how to get started:\n1) Install the Chrome extension: https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\n2) Export your cookies as a JSON file\n3) Send the JSON file to me using Telegram Web: https://web.telegram.org/\n\nAfter you are logged in, you can update your location anytime by sending a location from the Telegram location picker 📍'
+    I18N[lang].start
   );
 });
 
 bot.onText(/\/clocknow/, async (msg, match) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
 
   const data = db.getUser(chatId)
   if (!data) {
-    bot.sendMessage(chatId, "You have to log in /start");
+    bot.sendMessage(chatId, I18N[lang].loginRequired);
     return
   }
   try {
-    await performClockIn(chatId, data);
+    await performClockIn(chatId, data, lang);
   } catch (error) {
-    bot.sendMessage(chatId, `ERROR Clockin in ${error}`);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].clocknowError, { error: errMsg }));
   }
 });
 
 bot.onText(/\/clockin(?:\s+(.+))?/, (msg, match) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
   const rawInput = match?.[1]?.trim();
 
   if (!rawInput) {
-    bot.sendMessage(chatId, "Usage: /clockin 14:00 or /clockin 5pm or /clockin 5:20pm ⏰");
+    bot.sendMessage(chatId, I18N[lang].usageClockin);
     return;
   }
 
   const data = db.getUser(chatId)
   if (!data) {
-    bot.sendMessage(chatId, "You have to log in /start 🔐");
+    bot.sendMessage(chatId, I18N[lang].loginRequired);
     return;
   }
 
   const parsed = parseClockTime(rawInput);
   if (!parsed) {
-    bot.sendMessage(chatId, "Invalid time format 😅 Try /clockin 14:00, /clockin 5pm, or /clockin 5:20pm");
+    bot.sendMessage(chatId, I18N[lang].invalidClockin);
     return;
   }
 
   const scheduledTime = nextOccurrence(parsed.hours, parsed.minutes);
-  const task = scheduler.add(chatId, scheduledTime);
+  const task = scheduler.add(chatId, scheduledTime, lang);
 
   bot.sendMessage(
     chatId,
-    `✅ Scheduled clock-in 🎉\nTime: ${formatScheduleTime(scheduledTime)}\nTask ID: ${task.id}`
+    formatTemplate(I18N[lang].scheduledClockin, { time: formatScheduleTime(scheduledTime, lang), id: task.id })
   );
 });
 
 bot.onText(/\/list/, (msg) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
   const tasks = scheduler.getByUser(chatId);
 
   if (tasks.length === 0) {
-    bot.sendMessage(chatId, "No scheduled clock-ins yet 💤");
+    bot.sendMessage(chatId, I18N[lang].listEmpty);
     return;
   }
 
   const lines = tasks.map((task) => {
     const statusEmoji = task.status === 'pending' ? '⏳' : task.status === 'executed' ? '✅' : '❌';
-    return `${statusEmoji} ${task.id} — ${formatScheduleTime(task.scheduledTime)} (${task.status})`;
+    const statusLabel = task.status === 'pending'
+      ? I18N[lang].statusPending
+      : task.status === 'executed'
+        ? I18N[lang].statusExecuted
+        : I18N[lang].statusFailed;
+    return `${statusEmoji} ${task.id} — ${formatScheduleTime(task.scheduledTime, lang)} (${statusLabel})`;
   });
 
-  bot.sendMessage(chatId, `Here are your scheduled clock-ins 📋\n\n${lines.join('\n')}`);
+  bot.sendMessage(chatId, `${I18N[lang].listHeader}\n\n${lines.join('\n')}`);
 });
 
 bot.onText(/\/cancel(?:\s+(.+))?/, (msg, match) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
   const rawArg = match?.[1]?.trim();
 
   if (!rawArg) {
-    bot.sendMessage(chatId, "Usage: /cancel <task-id> or /cancel all 🧹");
+    bot.sendMessage(chatId, I18N[lang].cancelUsage);
     return;
   }
 
@@ -224,62 +362,75 @@ bot.onText(/\/cancel(?:\s+(.+))?/, (msg, match) => {
   if (rawArg.toLowerCase() === 'all') {
     const pending = tasks.filter((task) => task.status === 'pending');
     if (pending.length === 0) {
-      bot.sendMessage(chatId, "No pending tasks to cancel 💤");
+      bot.sendMessage(chatId, I18N[lang].cancelAllNone);
       return;
     }
     for (const task of pending) {
       scheduler.cancel(task.id);
     }
-    bot.sendMessage(chatId, `Cancelled ${pending.length} task(s) ✅🧹`);
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].cancelAllOk, { count: pending.length }));
     return;
   }
 
   const id = rawArg;
   const belongsToUser = tasks.some((task) => task.id === id);
   if (!belongsToUser) {
-    bot.sendMessage(chatId, "I can't find that task id for you 🤔");
+    bot.sendMessage(chatId, I18N[lang].cancelNotFound);
     return;
   }
 
   const cancelled = scheduler.cancel(id);
   if (cancelled) {
-    bot.sendMessage(chatId, `Cancelled ✅\nTask ID: ${id}`);
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].cancelOk, { id }));
   } else {
-    bot.sendMessage(chatId, `Couldn't cancel that task 😬`);
+    bot.sendMessage(chatId, I18N[lang].cancelFail);
   }
 });
 
 bot.onText(/\/data/, (msg, match) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
 
   const data = db.getUser(chatId)
 
   if (!data) {
-    bot.sendMessage(chatId, "There is no user data 🫥");
+    bot.sendMessage(chatId, I18N[lang].dataEmpty);
     return
   }
   console.log(parsePhoenixToken(data.cookies.hcmex))
+  const statusSet = I18N[lang].statusSet;
+  const statusMissing = I18N[lang].statusMissing;
+  const hcmexStatus = data.cookies.hcmex ? statusSet : statusMissing;
+  const deviceStatus = data.cookies.deviceId ? statusSet : statusMissing;
+  const geoStatus = data.cookies.geo ? statusSet : statusMissing;
   const reply = [
-    `🧾 User data`,
+    I18N[lang].dataHeader,
     ``,
-    `🆔 User ID: ${data.userId}`,
-    `📍 Location: ${data.geo.lat.toFixed(6)}, ${data.geo.long.toFixed(6)}`,
-    `🏢 Domain: ${data.cookies.domain}`,
-    `🍪 Cookies:`,
-    `- _hcmex_key: ${data.cookies.hcmex ? 'set' : 'missing'}`,
-    `- device_id: ${data.cookies.deviceId ? 'set' : 'missing'}`,
-    `- geo: ${data.cookies.geo ? 'set' : 'missing'}`,
-    `⏳ Expires: ${new Date(data.cookies.expires).toLocaleString()}`,
+    formatTemplate(I18N[lang].dataUserId, { userId: data.userId }),
+    formatTemplate(I18N[lang].dataLocation, {
+      lat: data.geo.lat.toFixed(6),
+      long: data.geo.long.toFixed(6),
+      accuracy: data.geo.accuracy,
+    }),
+    formatTemplate(I18N[lang].dataDomain, { domain: data.cookies.domain }),
+    I18N[lang].dataCookies,
+    formatTemplate(I18N[lang].dataCookieHcmex, { status: hcmexStatus }),
+    formatTemplate(I18N[lang].dataCookieDevice, { status: deviceStatus }),
+    formatTemplate(I18N[lang].dataCookieGeo, { status: geoStatus }),
+    formatTemplate(I18N[lang].dataExpires, {
+      expires: new Date(data.cookies.expires).toLocaleString(lang === 'es' ? 'es-ES' : 'en-US'),
+    }),
   ].join('\n');
   bot.sendMessage(chatId, reply);
 });
 
 bot.onText(/\/location/, (msg) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
   const data = db.getUser(chatId);
 
   if (!data) {
-    bot.sendMessage(chatId, "You have to log in /start 🔐");
+    bot.sendMessage(chatId, I18N[lang].loginRequired);
     return;
   }
 
@@ -290,15 +441,16 @@ bot.onText(/\/location/, (msg) => {
 
 bot.on('document', async (msg) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
   const document = msg.document;
 
   if (!document?.file_name?.endsWith('.json')) {
-    bot.sendMessage(chatId, 'Please send a .json file');
+    bot.sendMessage(chatId, I18N[lang].docInvalid);
     return;
   }
 
   if (document.file_size && document.file_size > 5 * 1024 * 1024) {
-    bot.sendMessage(chatId, 'File too large. Max 5MB.');
+    bot.sendMessage(chatId, I18N[lang].docTooLarge);
     return;
   }
 
@@ -337,27 +489,36 @@ bot.on('document', async (msg) => {
 
     db.addUser(msg.chat.id, userData)
 
-    const replymsg = `lat long ${geo.lat.toFixed(6)}, ${geo.long.toFixed(6)}\nhttps://www.google.com/search?q=${geo.lat.toFixed(6)}%2C+${geo.long.toFixed(6)}\n\ndomain ${cookies.domain}\nexpires on ${new Date(cookies.expires).toLocaleString(phoenix?.locale)}`
+    const link = `https://www.google.com/search?q=${geo.lat.toFixed(6)}%2C+${geo.long.toFixed(6)}`;
+    const replymsg = formatTemplate(I18N[lang].docDetails, {
+      lat: geo.lat.toFixed(6),
+      long: geo.long.toFixed(6),
+      link,
+      domain: cookies.domain,
+      expires: new Date(cookies.expires).toLocaleString(lang === 'es' ? 'es-ES' : 'en-US'),
+    });
 
-    bot.sendMessage(chatId, `✅ Parsed successfully!\n\n${replymsg}`, {
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].docParsed, { details: replymsg }), {
       parse_mode: 'Markdown'
     });
 
   } catch (error) {
     console.error('Error processing JSON:', error);
-    bot.sendMessage(chatId, `❌ Error: ${error instanceof Error ? error.message : 'Invalid JSON'}`);
+    const errMsg = error instanceof Error ? error.message : I18N[lang].docInvalidJson;
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].docError, { error: errMsg }));
   }
 });
 
 bot.on('location', (msg) => {
   const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
   const location = msg.location;
 
   if (!location) return;
 
   const data = db.getUser(chatId);
   if (!data) {
-    bot.sendMessage(chatId, "You have to log in /start 🔐");
+    bot.sendMessage(chatId, I18N[lang].loginRequired);
     return;
   }
 
@@ -381,7 +542,7 @@ bot.on('location', (msg) => {
   db.addUser(chatId, updatedUser);
 
   const link = `https://www.google.com/search?q=${updatedGeo.lat.toFixed(6)}%2C+${updatedGeo.long.toFixed(6)}`;
-  bot.sendMessage(chatId, `📍 Location updated!\n${link}`);
+  bot.sendMessage(chatId, formatTemplate(I18N[lang].locationUpdated, { link }));
 });
 
 
