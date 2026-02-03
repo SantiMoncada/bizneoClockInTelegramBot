@@ -68,7 +68,7 @@ export class SchedulerStore {
     return task;
   }
 
-  getPending(now = new Date()): ScheduledTask[] {
+  getPending(): ScheduledTask[] {
     return this.schedules
       .filter((task) => task.status === 'pending')
       .sort((a, b) => a.scheduledTime.getTime() - b.scheduledTime.getTime());

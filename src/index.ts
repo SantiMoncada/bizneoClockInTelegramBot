@@ -34,6 +34,7 @@ const I18N = {
     scheduledClockin: '✅ Scheduled clock-in 🎉\nTime: {time}\nTask ID: {id}',
     clockedInNow: 'Clocked in successfully ✅',
     clockedInScheduled: '✅ Clocked in (scheduled) 🎯\nTime: {time}',
+    clockedInScheduledNotify: 'Clocked in (scheduled) successfully ✅',
     scheduledFailed: '❌ Scheduled clock-in failed: {error}',
     clocknowError: '❌ Error: {error}',
     listHeader: 'Here are your scheduled clock-ins 📋',
@@ -84,6 +85,7 @@ const I18N = {
     scheduledClockin: '✅ Fichaje programado 🎉\nHora: {time}\nID de tarea: {id}',
     clockedInNow: 'Fichado correctamente ✅',
     clockedInScheduled: '✅ Fichado (programado) 🎯\nHora: {time}',
+    clockedInScheduledNotify: 'Fichado (programado) correctamente ✅',
     scheduledFailed: '❌ Fallo el fichaje programado: {error}',
     clocknowError: '❌ Error: {error}',
     listHeader: 'Estos son tus fichajes programados 📋',
@@ -205,7 +207,11 @@ async function performClockIn(chatId: number, data: UserData, lang: Lang, locale
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    const errMsg = `HTTP ${response.status}`;
+    if (!scheduledAt) {
+      bot.sendMessage(chatId, formatTemplate(I18N[lang].clocknowError, { error: errMsg }));
+    }
+    throw new Error(errMsg);
   }
 
   if (scheduledAt) {
@@ -220,7 +226,7 @@ async function runScheduledTasks() {
   isRunningSchedule = true;
   try {
     const now = new Date();
-    const pending = scheduler.getPending(now).filter((task) => task.scheduledTime.getTime() <= now.getTime());
+    const pending = scheduler.getPending().filter((task) => task.scheduledTime.getTime() <= now.getTime());
     for (const task of pending) {
       const data = db.getUser(task.userId);
       if (!data) {
@@ -646,10 +652,11 @@ bot.on('polling_error', (error) => {
 });
 
 setInterval(() => {
+  console.log("tik")
   runScheduledTasks().catch((error) => {
     console.error('Scheduler error:', error);
   });
-}, 30000);
+}, 10000);
 
 // Graceful shutdown
 process.once('SIGINT', () => {
