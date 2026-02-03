@@ -19,7 +19,7 @@ console.log(`Bot started in ${config.nodeEnv} mode`);
 const botCommands = [
   { command: 'start', description: 'Start the bot and see welcome message' },
   { command: 'data', description: 'gets all user data' },
-  { command: 'clockin', description: 'clocks in' },
+  { command: 'clocknow', description: 'clocks in' },
 ];
 
 // Set bot commands in Telegram
@@ -34,8 +34,7 @@ bot.onText(/\/start/, (msg) => {
   );
 });
 
-// Command: /clockin
-bot.onText(/\/clockin/, async (msg, match) => {
+bot.onText(/\/clocknow/, async (msg, match) => {
   const chatId = msg.chat.id;
 
   const data = db.getUser(chatId)
