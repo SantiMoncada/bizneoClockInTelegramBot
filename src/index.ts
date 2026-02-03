@@ -226,7 +226,9 @@ async function runScheduledTasks() {
   isRunningSchedule = true;
   try {
     const now = new Date();
+    console.log(scheduler.getPending())
     const pending = scheduler.getPending().filter((task) => task.scheduledTime.getTime() <= now.getTime());
+    console.log(pending)
     for (const task of pending) {
       const data = db.getUser(task.userId);
       if (!data) {
@@ -652,11 +654,10 @@ bot.on('polling_error', (error) => {
 });
 
 setInterval(() => {
-  console.log("tik")
   runScheduledTasks().catch((error) => {
     console.error('Scheduler error:', error);
   });
-}, 10000);
+}, 15000);
 
 // Graceful shutdown
 process.once('SIGINT', () => {
