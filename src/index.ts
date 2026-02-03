@@ -227,7 +227,10 @@ async function runScheduledTasks() {
   try {
     const now = new Date();
     console.log(scheduler.getPending())
-    const pending = scheduler.getPending().filter((task) => task.scheduledTime.getTime() <= now.getTime());
+    const pending = scheduler.getPending().filter((task) => {
+      console.log(task.scheduledTime.getTime(), now.getTime())
+      return task.scheduledTime.getTime() <= now.getTime()
+    });
     console.log(pending)
     for (const task of pending) {
       const data = db.getUser(task.userId);
