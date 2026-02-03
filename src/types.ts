@@ -12,5 +12,4 @@ export interface UserData {
     domain: string;
     expires: number;
   }
-  fakeGeo: number | null
 }
