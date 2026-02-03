@@ -8,6 +8,7 @@ import { UserData } from './types.js';
 import { Database } from './database.js';
 import { SchedulerStore } from './schedulerStore.js';
 import { DateTime } from 'luxon';
+import cron from 'node-cron';
 
 const db = new Database()
 const scheduler = new SchedulerStore()
@@ -706,11 +707,12 @@ bot.on('polling_error', (error) => {
   console.error('Polling error:', error);
 });
 
-setInterval(() => {
+cron.schedule('*/15 * * * *', () => {
+  console.log("Running CronJob " + Date.now().toString())
   runScheduledTasks().catch((error) => {
     console.error('Scheduler error:', error);
   });
-}, 15000);
+});
 
 // Graceful shutdown
 process.once('SIGINT', () => {
