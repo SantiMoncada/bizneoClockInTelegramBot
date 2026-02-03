@@ -254,6 +254,7 @@ console.log(`Bot started in ${config.nodeEnv} mode`);
 console.log(`PORT=${config.port}`);
 console.log(`WEBHOOK_URL=${config.webhookUrl ?? 'not set'}`);
 console.log(`DATA_DIR=${config.dataDir}`);
+console.log(`RAILWAY_PUBLIC_DOMAIN=${process.env.RAILWAY_PUBLIC_DOMAIN ?? 'not set'}`);
 
 // Define bot commands (EN + ES)
 const botCommandsEn = [
