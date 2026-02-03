@@ -1,4 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
+import http from 'http';
 import { config } from './config.js';
 import { parsePhoenixToken } from './parse-phoenix-token-browser.js';
 import { error } from 'console';
@@ -235,12 +236,23 @@ async function runScheduledTasks() {
   }
 }
 
+const isDevelopment = config.nodeEnv === 'development';
+const hasWebhookConfig = Boolean(config.webhookUrl);
+const useWebhook = !isDevelopment && hasWebhookConfig;
+const usePolling = isDevelopment || !hasWebhookConfig;
+
+if (!isDevelopment && !hasWebhookConfig) {
+  console.warn('WEBHOOK_URL is not set. Falling back to polling in production.');
+}
+
 // Create bot instance
 const bot = new TelegramBot(config.telegramBotToken, {
-  polling: config.nodeEnv === 'development',
+  polling: usePolling,
 });
 
 console.log(`Bot started in ${config.nodeEnv} mode`);
+console.log(`PORT=${config.port}`);
+console.log(`WEBHOOK_URL=${config.webhookUrl ?? 'not set'}`);
 
 // Define bot commands (EN + ES)
 const botCommandsEn = [
@@ -266,6 +278,63 @@ const botCommandsEs = [
 // Set bot commands in Telegram
 bot.setMyCommands(botCommandsEn).catch(console.error);
 bot.setMyCommands(botCommandsEs, { language_code: 'es' }).catch(console.error);
+
+let webhookServer: http.Server | null = null;
+const webhookPath = `/bot${config.telegramBotToken}`;
+
+async function startWebhookServer() {
+  if (!config.webhookUrl) return;
+
+  const baseUrl = config.webhookUrl.replace(/\/$/, '');
+  const fullWebhookUrl = `${baseUrl}${webhookPath}`;
+
+  webhookServer = http.createServer((req, res) => {
+    if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'ok',
+        mode: useWebhook ? 'webhook' : 'polling',
+        timestamp: new Date().toISOString(),
+      }));
+      return;
+    }
+
+    if (req.method !== 'POST' || req.url !== webhookPath) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      try {
+        const update = JSON.parse(body);
+        bot.processUpdate(update);
+        res.writeHead(200);
+        res.end('OK');
+      } catch (error) {
+        console.error('Webhook update error:', error);
+        res.writeHead(400);
+        res.end('Bad Request');
+      }
+    });
+  });
+
+  await bot.setWebHook(fullWebhookUrl);
+  webhookServer.listen(config.port, () => {
+    console.log(`Webhook server listening on port ${config.port}`);
+    console.log(`Webhook set to ${fullWebhookUrl}`);
+  });
+}
+
+if (useWebhook) {
+  startWebhookServer().catch((error) => {
+    console.error('Failed to start webhook server:', error);
+  });
+}
 
 // Command: /start
 bot.onText(/\/start/, (msg) => {
@@ -572,13 +641,23 @@ setInterval(() => {
 // Graceful shutdown
 process.once('SIGINT', () => {
   console.log('Stopping bot...');
-  bot.stopPolling();
+  if (usePolling) {
+    bot.stopPolling();
+  }
+  if (webhookServer) {
+    webhookServer.close();
+  }
   process.exit(0);
 });
 
 process.once('SIGTERM', () => {
   console.log('Stopping bot...');
-  bot.stopPolling();
+  if (usePolling) {
+    bot.stopPolling();
+  }
+  if (webhookServer) {
+    webhookServer.close();
+  }
   process.exit(0);
 });
 
