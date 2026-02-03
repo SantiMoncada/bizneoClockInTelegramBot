@@ -1,6 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { config } from './config.js';
-import { parsePhoenixToken } from './parse-phoenix-token-browser';
+import { parsePhoenixToken } from './parse-phoenix-token-browser.js';
 import { error } from 'console';
 import { getCsrfTokes, parseJsonCookies } from './helperFunctions.js';
 import { UserData } from './types.js';
@@ -567,7 +567,7 @@ setInterval(() => {
   runScheduledTasks().catch((error) => {
     console.error('Scheduler error:', error);
   });
-}, 15000);
+}, 30000);
 
 // Graceful shutdown
 process.once('SIGINT', () => {
