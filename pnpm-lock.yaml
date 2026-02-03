@@ -17,10 +17,16 @@ importers:
       jsdom:
         specifier: ^28.0.0
         version: 28.0.0
+      luxon:
+        specifier: ^3.7.2
+        version: 3.7.2
       node-telegram-bot-api:
         specifier: ^0.66.0
         version: 0.66.0(request@2.88.2)
     devDependencies:
+      '@types/luxon':
+        specifier: ^3.7.0
+        version: 3.7.1
       '@types/node':
         specifier: ^20.11.19
         version: 20.19.30
@@ -259,6 +265,9 @@ packages:
 
   '@types/jsdom@27.0.0':
     resolution: {integrity: sha512-NZyFl/PViwKzdEkQg96gtnB8wm+1ljhdDay9ahn4hgb+SfVtPCbm3TlmDUFXTA+MGN3CijicnMhG18SI5H3rFw==}
+
+  '@types/luxon@3.7.1':
+    resolution: {integrity: sha512-H3iskjFIAn5SlJU7OuxUmTEpebK6TKB8rxZShDslBMZJ5u9S//KM1sbdAisiSrqwLQncVjnpi2OK2J51h+4lsg==}
 
   '@types/node-telegram-bot-api@0.64.13':
     resolution: {integrity: sha512-/d3sYpZq4sDwKWAm9XsIsb8MclclJ1yPXZC7uAzZRrJIFY8yg/63oNrLf9CBTlaS/XGR1N66BwibfJQGiWVsqg==}
@@ -740,6 +749,10 @@ packages:
   lru-cache@11.2.5:
     resolution: {integrity: sha512-vFrFJkWtJvJnD5hg+hJvVE8Lh/TcMzKnTgCWmtBipwI5yLX/iX+5UB2tfuyODF5E7k9xEzMdYgGqaSb1c0c5Yw==}
     engines: {node: 20 || >=22}
+
+  luxon@3.7.2:
+    resolution: {integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==}
+    engines: {node: '>=12'}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -1254,6 +1267,8 @@ snapshots:
       '@types/node': 20.19.30
       '@types/tough-cookie': 4.0.5
       parse5: 7.3.0
+
+  '@types/luxon@3.7.1': {}
 
   '@types/node-telegram-bot-api@0.64.13':
     dependencies:
@@ -1883,6 +1898,8 @@ snapshots:
   lodash@4.17.23: {}
 
   lru-cache@11.2.5: {}
+
+  luxon@3.7.2: {}
 
   math-intrinsics@1.1.0: {}
 

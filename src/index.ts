@@ -7,6 +7,7 @@ import { getCsrfTokes, parseJsonCookies } from './helperFunctions.js';
 import { UserData } from './types.js';
 import { Database } from './database.js';
 import { SchedulerStore } from './schedulerStore.js';
+import { DateTime } from 'luxon';
 
 const db = new Database()
 const scheduler = new SchedulerStore()
@@ -15,6 +16,7 @@ let isRunningSchedule = false;
 
 type Lang = 'en' | 'es';
 type Locale = string;
+const DEFAULT_TIME_ZONE = 'Europe/Madrid';
 
 const I18N = {
   en: {
@@ -26,6 +28,7 @@ const I18N = {
       list: 'List your scheduled clock-ins',
       cancel: 'Cancel a scheduled clock-in',
       location: 'Show your saved location link',
+      settimezone: 'Set your time zone',
     },
     start: 'Welcome! 👋\n\nHere is how to get started:\n1) Install the Chrome extension: https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\n2) Export your cookies as a JSON file\n3) Send the JSON file to me using Telegram Web: https://web.telegram.org/\n\nAfter you are logged in, you can update your location anytime by sending a location from the Telegram location picker 📍',
     loginRequired: 'You have to log in /start 🔐',
@@ -60,6 +63,9 @@ const I18N = {
     dataExpires: '⏳ Expires: {expires}',
     statusSet: 'set',
     statusMissing: 'missing',
+    setTimeZoneUsage: 'Usage: /setTimeZone Europe/Madrid',
+    setTimeZoneInvalid: 'Invalid time zone. Example: /setTimeZone Europe/Madrid',
+    setTimeZoneOk: '✅ Time zone updated to {tz}',
     docInvalid: 'Please send a .json file',
     docTooLarge: 'File too large. Max 5MB.',
     docParsed: '✅ Parsed successfully!\n\n{details}',
@@ -77,6 +83,7 @@ const I18N = {
       list: 'Ver fichajes programados',
       cancel: 'Cancelar un fichaje programado',
       location: 'Mostrar enlace de ubicacion guardada',
+      settimezone: 'Configurar zona horaria',
     },
     start: 'Bienvenido! 👋\n\nComo empezar:\n1) Instala la extension de Chrome: https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\n2) Exporta tus cookies como archivo JSON\n3) Enviame el JSON usando Telegram Web: https://web.telegram.org/\n\nDespues de iniciar sesion, puedes actualizar tu ubicacion enviando una ubicacion desde el selector de Telegram 📍',
     loginRequired: 'Tienes que iniciar sesion con /start 🔐',
@@ -111,6 +118,9 @@ const I18N = {
     dataExpires: '⏳ Expira: {expires}',
     statusSet: 'ok',
     statusMissing: 'falta',
+    setTimeZoneUsage: 'Uso: /setTimeZone Europe/Madrid',
+    setTimeZoneInvalid: 'Zona horaria invalida. Ejemplo: /setTimeZone Europe/Madrid',
+    setTimeZoneOk: '✅ Zona horaria actualizada a {tz}',
     docInvalid: 'Por favor envia un archivo .json',
     docTooLarge: 'Archivo demasiado grande. Maximo 5MB.',
     docParsed: '✅ Parseado correctamente!\n\n{details}',
@@ -157,16 +167,16 @@ function parseClockTime(input: string): { hours: number; minutes: number } | nul
   return { hours: rawHours, minutes: rawMinutes };
 }
 
-function nextOccurrence(hours: number, minutes: number, now = new Date()): Date {
-  const scheduled = new Date(now);
-  scheduled.setHours(hours, minutes, 0, 0);
-  if (scheduled.getTime() <= now.getTime()) {
-    scheduled.setDate(scheduled.getDate() + 1);
+function nextOccurrence(hours: number, minutes: number, timeZone: string, now = new Date()): Date {
+  const nowInZone = DateTime.fromJSDate(now, { zone: timeZone });
+  let scheduled = nowInZone.set({ hour: hours, minute: minutes, second: 0, millisecond: 0 });
+  if (scheduled.toMillis() <= nowInZone.toMillis()) {
+    scheduled = scheduled.plus({ days: 1 });
   }
-  return scheduled;
+  return scheduled.toUTC().toJSDate();
 }
 
-function formatScheduleTime(date: Date, locale: Locale): string {
+function formatScheduleTime(date: Date, locale: Locale, timeZone?: string): string {
   const safeLocale = locale || 'en';
   return date.toLocaleString(safeLocale, {
     weekday: 'short',
@@ -175,10 +185,15 @@ function formatScheduleTime(date: Date, locale: Locale): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
   });
 }
 
-async function performClockIn(chatId: number, data: UserData, lang: Lang, locale: Locale, scheduledAt?: Date) {
+function getTimeZoneForUser(data: UserData | null): string {
+  return data?.timeZone || DEFAULT_TIME_ZONE;
+}
+
+async function performClockIn(chatId: number, data: UserData, lang: Lang, locale: Locale, timeZone: string, scheduledAt?: Date) {
   const { metaCsrf, inputCsrf } = await getCsrfTokes(data)
 
   const response = await fetch(`https://${data.cookies.domain}/chrono`, {
@@ -215,7 +230,7 @@ async function performClockIn(chatId: number, data: UserData, lang: Lang, locale
   }
 
   if (scheduledAt) {
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].clockedInScheduled, { time: formatScheduleTime(scheduledAt, locale) }));
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].clockedInScheduled, { time: formatScheduleTime(scheduledAt, locale, timeZone) }));
   } else {
     bot.sendMessage(chatId, I18N[lang].clockedInNow);
   }
@@ -239,7 +254,7 @@ async function runScheduledTasks() {
         continue;
       }
       try {
-        await performClockIn(task.userId, data, task.lang, task.locale ?? 'en', task.scheduledTime);
+        await performClockIn(task.userId, data, task.lang, task.locale ?? 'en', task.timeZone ?? DEFAULT_TIME_ZONE, task.scheduledTime);
         scheduler.markExecuted(task.id);
       } catch (error) {
         scheduler.markExecuted(task.id, error instanceof Error ? error.message : String(error));
@@ -281,6 +296,7 @@ const botCommandsEn = [
   { command: 'list', description: I18N.en.commands.list },
   { command: 'cancel', description: I18N.en.commands.cancel },
   { command: 'location', description: I18N.en.commands.location },
+  { command: 'settimezone', description: I18N.en.commands.settimezone },
 ];
 
 const botCommandsEs = [
@@ -291,6 +307,7 @@ const botCommandsEs = [
   { command: 'list', description: I18N.es.commands.list },
   { command: 'cancel', description: I18N.es.commands.cancel },
   { command: 'location', description: I18N.es.commands.location },
+  { command: 'settimezone', description: I18N.es.commands.settimezone },
 ];
 
 // Set bot commands in Telegram
@@ -375,7 +392,8 @@ bot.onText(/\/clocknow/, async (msg, match) => {
     return
   }
   try {
-    await performClockIn(chatId, data, lang, locale);
+    const timeZone = getTimeZoneForUser(data);
+    await performClockIn(chatId, data, lang, locale, timeZone);
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     bot.sendMessage(chatId, formatTemplate(I18N[lang].clocknowError, { error: errMsg }));
@@ -405,12 +423,13 @@ bot.onText(/\/clockin(?:\s+(.+))?/, (msg, match) => {
     return;
   }
 
-  const scheduledTime = nextOccurrence(parsed.hours, parsed.minutes);
-  const task = scheduler.add(chatId, scheduledTime, lang, locale);
+  const timeZone = getTimeZoneForUser(data);
+  const scheduledTime = nextOccurrence(parsed.hours, parsed.minutes, timeZone);
+  const task = scheduler.add(chatId, scheduledTime, lang, locale, timeZone);
 
   bot.sendMessage(
     chatId,
-    formatTemplate(I18N[lang].scheduledClockin, { time: formatScheduleTime(scheduledTime, locale), id: task.id })
+    formatTemplate(I18N[lang].scheduledClockin, { time: formatScheduleTime(scheduledTime, locale, timeZone), id: task.id })
   );
 });
 
@@ -419,6 +438,8 @@ bot.onText(/\/list/, (msg) => {
   const lang = getLangFromMessage(msg);
   const locale = getLocaleFromMessage(msg);
   const tasks = scheduler.getByUser(chatId);
+  const data = db.getUser(chatId);
+  const fallbackTimeZone = getTimeZoneForUser(data);
 
   if (tasks.length === 0) {
     bot.sendMessage(chatId, I18N[lang].listEmpty);
@@ -433,7 +454,8 @@ bot.onText(/\/list/, (msg) => {
         ? I18N[lang].statusExecuted
         : I18N[lang].statusFailed;
     const timeLocale = task.locale ?? locale;
-    return `${statusEmoji} ${task.id} — ${formatScheduleTime(task.scheduledTime, timeLocale)} (${statusLabel})`;
+    const timeZone = task.timeZone ?? fallbackTimeZone;
+    return `${statusEmoji} ${task.id} — ${formatScheduleTime(task.scheduledTime, timeLocale, timeZone)} (${statusLabel})`;
   });
 
   bot.sendMessage(chatId, `${I18N[lang].listHeader}\n\n${lines.join('\n')}`);
@@ -577,6 +599,7 @@ bot.on('document', async (msg) => {
       userId: phoenix.user_id,
       geo,
       cookies,
+      timeZone: DEFAULT_TIME_ZONE,
 
     }
 
@@ -636,6 +659,37 @@ bot.on('location', (msg) => {
 
   const link = `https://www.google.com/search?q=${updatedGeo.lat.toFixed(6)}%2C+${updatedGeo.long.toFixed(6)}`;
   bot.sendMessage(chatId, formatTemplate(I18N[lang].locationUpdated, { link }));
+});
+
+bot.onText(/\/setTimeZone(?:\s+(.+))?/i, (msg, match) => {
+  const chatId = msg.chat.id;
+  const lang = getLangFromMessage(msg);
+  const rawTz = match?.[1]?.trim();
+
+  const data = db.getUser(chatId);
+  if (!data) {
+    bot.sendMessage(chatId, I18N[lang].loginRequired);
+    return;
+  }
+
+  if (!rawTz) {
+    bot.sendMessage(chatId, I18N[lang].setTimeZoneUsage);
+    return;
+  }
+
+  const tz = rawTz;
+  const isValid = DateTime.now().setZone(tz).isValid;
+  if (!isValid) {
+    bot.sendMessage(chatId, I18N[lang].setTimeZoneInvalid);
+    return;
+  }
+
+  const updatedUser: UserData = {
+    ...data,
+    timeZone: tz,
+  };
+  db.addUser(chatId, updatedUser);
+  bot.sendMessage(chatId, formatTemplate(I18N[lang].setTimeZoneOk, { tz }));
 });
 
 

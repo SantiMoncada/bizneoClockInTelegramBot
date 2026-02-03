@@ -5,6 +5,7 @@ export interface UserData {
     long: number,
     accuracy: number
   };
+  timeZone?: string;
   cookies: {
     geo: string;
     hcmex: string;
