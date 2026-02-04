@@ -707,7 +707,7 @@ bot.on('polling_error', (error) => {
   console.error('Polling error:', error);
 });
 
-cron.schedule('*/10 * * * *', () => {
+cron.schedule('*/5 * * * *', () => {
   console.log("Running CronJob " + Date.now().toString())
   runScheduledTasks().catch((error) => {
     console.error('Scheduler error:', error);
