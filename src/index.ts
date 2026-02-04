@@ -33,6 +33,7 @@ const I18N = {
     },
     start: 'Welcome! 👋\n\nHere is how to get started:\n1) Install the Chrome extension: https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\n2) Export your cookies as a JSON file\n3) Send the JSON file to me using Telegram Web: https://web.telegram.org/\n\nAfter you are logged in, you can update your location anytime by sending a location from the Telegram location picker 📍',
     loginRequired: 'You have to log in /start 🔐',
+    sessionExpired: 'Your session expired. Please log in again with /start 🔐',
     usageClockin: 'Usage: /clockin 14:00 or /clockin 5pm or /clockin 5:20pm ⏰',
     invalidClockin: 'Invalid time format 😅 Try /clockin 14:00, /clockin 5pm, or /clockin 5:20pm',
     scheduledClockin: '✅ Scheduled clock-in 🎉\nTime: {time}\nTask ID: {id}',
@@ -88,6 +89,7 @@ const I18N = {
     },
     start: 'Bienvenido! 👋\n\nComo empezar:\n1) Instala la extension de Chrome: https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\n2) Exporta tus cookies como archivo JSON\n3) Enviame el JSON usando Telegram Web: https://web.telegram.org/\n\nDespues de iniciar sesion, puedes actualizar tu ubicacion enviando una ubicacion desde el selector de Telegram 📍',
     loginRequired: 'Tienes que iniciar sesion con /start 🔐',
+    sessionExpired: 'Tu sesion expiro. Inicia sesion otra vez con /start 🔐',
     usageClockin: 'Uso: /clockin 14:00 o /clockin 5pm o /clockin 5:20pm ⏰',
     invalidClockin: 'Formato de hora invalido 😅 Prueba /clockin 14:00, /clockin 5pm, o /clockin 5:20pm',
     scheduledClockin: '✅ Fichaje programado 🎉\nHora: {time}\nID de tarea: {id}',
@@ -194,6 +196,26 @@ function getTimeZoneForUser(data: UserData | null): string {
   return data?.timeZone || DEFAULT_TIME_ZONE;
 }
 
+function isSessionExpired(data: UserData | null): boolean {
+  if (!data) return true;
+  if (!data.cookies?.expires) return true;
+  return data.cookies.expires <= Date.now();
+}
+
+function requireValidUser(chatId: number, lang: Lang): UserData | null {
+  const data = db.getUser(chatId);
+  if (!data) {
+    bot.sendMessage(chatId, I18N[lang].loginRequired);
+    return null;
+  }
+  if (isSessionExpired(data)) {
+    db.removeUser(chatId);
+    bot.sendMessage(chatId, I18N[lang].sessionExpired);
+    return null;
+  }
+  return data;
+}
+
 async function performClockIn(chatId: number, data: UserData, lang: Lang, locale: Locale, timeZone: string, scheduledAt?: Date) {
   const { metaCsrf, inputCsrf } = await getCsrfTokes(data)
 
@@ -249,6 +271,12 @@ async function runScheduledTasks() {
       const data = db.getUser(task.userId);
       if (!data) {
         scheduler.markExecuted(task.id, "User not found");
+        continue;
+      }
+      if (isSessionExpired(data)) {
+        db.removeUser(task.userId);
+        scheduler.markExecuted(task.id, "Session expired");
+        bot.sendMessage(task.userId, I18N[task.lang].sessionExpired);
         continue;
       }
       try {
@@ -384,11 +412,8 @@ bot.onText(/\/clocknow/, async (msg, match) => {
   const lang = getLangFromMessage(msg);
   const locale = getLocaleFromMessage(msg);
 
-  const data = db.getUser(chatId)
-  if (!data) {
-    bot.sendMessage(chatId, I18N[lang].loginRequired);
-    return
-  }
+  const data = requireValidUser(chatId, lang);
+  if (!data) return;
   try {
     const timeZone = getTimeZoneForUser(data);
     await performClockIn(chatId, data, lang, locale, timeZone);
@@ -409,11 +434,8 @@ bot.onText(/\/clockin(?:\s+(.+))?/, (msg, match) => {
     return;
   }
 
-  const data = db.getUser(chatId)
-  if (!data) {
-    bot.sendMessage(chatId, I18N[lang].loginRequired);
-    return;
-  }
+  const data = requireValidUser(chatId, lang);
+  if (!data) return;
 
   const parsed = parseClockTime(rawInput);
   if (!parsed) {
@@ -437,7 +459,11 @@ bot.onText(/\/list/, (msg) => {
   const locale = getLocaleFromMessage(msg);
   const tasks = scheduler.getByUser(chatId);
   const data = db.getUser(chatId);
-  const fallbackTimeZone = getTimeZoneForUser(data);
+  if (data && isSessionExpired(data)) {
+    db.removeUser(chatId);
+    bot.sendMessage(chatId, I18N[lang].sessionExpired);
+  }
+  const fallbackTimeZone = getTimeZoneForUser(db.getUser(chatId));
 
   if (tasks.length === 0) {
     bot.sendMessage(chatId, I18N[lang].listEmpty);
@@ -503,12 +529,8 @@ bot.onText(/\/data/, (msg, match) => {
   const lang = getLangFromMessage(msg);
   const locale = getLocaleFromMessage(msg);
 
-  const data = db.getUser(chatId)
-
-  if (!data) {
-    bot.sendMessage(chatId, I18N[lang].dataEmpty);
-    return
-  }
+  const data = requireValidUser(chatId, lang);
+  if (!data) return;
   const statusSet = I18N[lang].statusSet;
   const statusMissing = I18N[lang].statusMissing;
   const hcmexStatus = data.cookies.hcmex ? statusSet : statusMissing;
@@ -538,12 +560,8 @@ bot.onText(/\/data/, (msg, match) => {
 bot.onText(/\/location/, (msg) => {
   const chatId = msg.chat.id;
   const lang = getLangFromMessage(msg);
-  const data = db.getUser(chatId);
-
-  if (!data) {
-    bot.sendMessage(chatId, I18N[lang].loginRequired);
-    return;
-  }
+  const data = requireValidUser(chatId, lang);
+  if (!data) return;
 
   const { lat, long } = data.geo;
   const link = `https://www.google.com/search?q=${lat.toFixed(6)}%2C+${long.toFixed(6)}`;
@@ -663,11 +681,8 @@ bot.onText(/\/setTimeZone(?:\s+(.+))?/i, (msg, match) => {
   const lang = getLangFromMessage(msg);
   const rawTz = match?.[1]?.trim();
 
-  const data = db.getUser(chatId);
-  if (!data) {
-    bot.sendMessage(chatId, I18N[lang].loginRequired);
-    return;
-  }
+  const data = requireValidUser(chatId, lang);
+  if (!data) return;
 
   if (!rawTz) {
     bot.sendMessage(chatId, I18N[lang].setTimeZoneUsage);

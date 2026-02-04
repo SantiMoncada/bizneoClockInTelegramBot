@@ -27,6 +27,11 @@ export class Database {
     return this.db[id.toString()] ?? null;
   }
 
+  removeUser(id: number) {
+    delete this.db[id.toString()];
+    this.saveToDisk();
+  }
+
   loadFromDisk() {
     try {
       if (existsSync(dbPath)) {
