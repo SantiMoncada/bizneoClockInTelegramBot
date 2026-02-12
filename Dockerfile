@@ -22,7 +22,6 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
-COPY userData.json scheduledTasks.json ./
 
 USER app
 CMD ["node", "dist/index.js"]
