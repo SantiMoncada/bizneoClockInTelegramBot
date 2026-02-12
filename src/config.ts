@@ -29,7 +29,7 @@ function getConfig(): Config {
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT || '3000', 10),
     webhookUrl: process.env.WEBHOOK_URL || inferredWebhookUrl,
-    dataDir: process.env.DATA_DIR || '.',
+    dataDir: process.env.DATA_DIR || 'data',
   };
 }
 

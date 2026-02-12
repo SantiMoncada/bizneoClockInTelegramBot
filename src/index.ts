@@ -293,14 +293,8 @@ async function runScheduledTasks() {
   }
 }
 
-const isDevelopment = config.nodeEnv === 'development';
-const hasWebhookConfig = Boolean(config.webhookUrl);
-const useWebhook = !isDevelopment && hasWebhookConfig;
-const usePolling = isDevelopment || !hasWebhookConfig;
-
-if (!isDevelopment && !hasWebhookConfig) {
-  console.warn('WEBHOOK_URL is not set. Falling back to polling in production.');
-}
+const useWebhook = Boolean(config.webhookUrl);
+const usePolling = !useWebhook;
 
 // Create bot instance
 const bot = new TelegramBot(config.telegramBotToken, {
