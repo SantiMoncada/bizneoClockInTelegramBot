@@ -1,8 +1,10 @@
 services:
   bot:
+    container_name: clockin-bot
     build: .
     env_file:
       - .env
+    restart: unless-stopped
     environment:
       DATA_DIR: /data
     ports:
