@@ -1,5 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 import { config } from './config.js';
 import { parsePhoenixToken } from './parse-phoenix-token-browser.js';
 import { error } from 'console';
@@ -18,6 +20,24 @@ let isRunningSchedule = false;
 type Lang = 'en' | 'es';
 type Locale = string;
 const DEFAULT_TIME_ZONE = 'Europe/Madrid';
+const DATA_ROUTE_PREFIX = '/data';
+const PUBLIC_DATA_DIR = path.resolve('data');
+
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case '.json':
+      return 'application/json; charset=utf-8';
+    case '.txt':
+      return 'text/plain; charset=utf-8';
+    case '.csv':
+      return 'text/csv; charset=utf-8';
+    case '.log':
+      return 'text/plain; charset=utf-8';
+    default:
+      return 'application/octet-stream';
+  }
+}
 
 const I18N = {
   en: {
@@ -297,6 +317,7 @@ const isDevelopment = config.nodeEnv === 'development';
 const hasWebhookConfig = Boolean(config.webhookUrl);
 const useWebhook = !isDevelopment && hasWebhookConfig;
 const usePolling = isDevelopment || !hasWebhookConfig;
+const enableHttpServer = useWebhook || process.env.ENABLE_HTTP_SERVER === 'true';
 
 if (!isDevelopment && !hasWebhookConfig) {
   console.warn('WEBHOOK_URL is not set. Falling back to polling in production.');
@@ -344,10 +365,10 @@ let webhookServer: http.Server | null = null;
 const webhookPath = `/bot${config.telegramBotToken}`;
 
 async function startWebhookServer() {
-  if (!config.webhookUrl) return;
+  if (!enableHttpServer) return;
 
-  const baseUrl = config.webhookUrl.replace(/\/$/, '');
-  const fullWebhookUrl = `${baseUrl}${webhookPath}`;
+  const baseUrl = config.webhookUrl ? config.webhookUrl.replace(/\/$/, '') : '';
+  const fullWebhookUrl = baseUrl ? `${baseUrl}${webhookPath}` : '';
 
   webhookServer = http.createServer((req, res) => {
     if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
@@ -358,6 +379,70 @@ async function startWebhookServer() {
         timestamp: new Date().toISOString(),
       }));
       return;
+    }
+
+    if (req.method === 'GET' && req.url) {
+      const url = new URL(req.url, 'http://localhost');
+      if (url.pathname === DATA_ROUTE_PREFIX || url.pathname === `${DATA_ROUTE_PREFIX}/`) {
+        fs.promises.readdir(PUBLIC_DATA_DIR, { withFileTypes: true })
+          .then((entries) => {
+            const files = entries
+              .filter((entry) => entry.isFile())
+              .map((entry) => entry.name)
+              .sort();
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ files }));
+          })
+          .catch((err) => {
+            console.error('Failed to list data files:', err);
+            res.writeHead(500);
+            res.end('Internal Server Error');
+          });
+        return;
+      }
+
+      if (url.pathname.startsWith(`${DATA_ROUTE_PREFIX}/`)) {
+        const rawPath = url.pathname.slice(DATA_ROUTE_PREFIX.length + 1);
+        const decodedPath = decodeURIComponent(rawPath);
+        const resolvedPath = path.resolve(PUBLIC_DATA_DIR, decodedPath);
+
+        if (!resolvedPath.startsWith(PUBLIC_DATA_DIR + path.sep)) {
+          res.writeHead(403);
+          res.end('Forbidden');
+          return;
+        }
+
+        fs.promises.stat(resolvedPath)
+          .then((stat) => {
+            if (!stat.isFile()) {
+              res.writeHead(404);
+              res.end('Not Found');
+              return;
+            }
+
+            res.writeHead(200, { 'content-type': getMimeType(resolvedPath) });
+            const stream = fs.createReadStream(resolvedPath);
+            stream.on('error', (err) => {
+              console.error('Failed to read data file:', err);
+              if (!res.headersSent) {
+                res.writeHead(500);
+              }
+              res.end('Internal Server Error');
+            });
+            stream.pipe(res);
+          })
+          .catch((err) => {
+            if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+              res.writeHead(404);
+              res.end('Not Found');
+              return;
+            }
+            console.error('Failed to stat data file:', err);
+            res.writeHead(500);
+            res.end('Internal Server Error');
+          });
+        return;
+      }
     }
 
     if (req.method !== 'POST' || req.url !== webhookPath) {
@@ -384,16 +469,22 @@ async function startWebhookServer() {
     });
   });
 
-  await bot.setWebHook(fullWebhookUrl);
+  if (useWebhook && fullWebhookUrl) {
+    await bot.setWebHook(fullWebhookUrl);
+  }
   webhookServer.listen(config.port, () => {
-    console.log(`Webhook server listening on port ${config.port}`);
-    console.log(`Webhook set to ${fullWebhookUrl}`);
+    console.log(`HTTP server listening on port ${config.port}`);
+    if (useWebhook && fullWebhookUrl) {
+      console.log(`Webhook set to ${fullWebhookUrl}`);
+    } else {
+      console.log('Webhook not configured (HTTP server running without webhook).');
+    }
   });
 }
 
-if (useWebhook) {
+if (enableHttpServer) {
   startWebhookServer().catch((error) => {
-    console.error('Failed to start webhook server:', error);
+    console.error('Failed to start HTTP server:', error);
   });
 }
 
