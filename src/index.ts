@@ -21,7 +21,10 @@ type Lang = 'en' | 'es';
 type Locale = string;
 const DEFAULT_TIME_ZONE = 'Europe/Madrid';
 const DATA_ROUTE_PREFIX = '/data';
-const PUBLIC_DATA_DIR = path.resolve('data');
+const defaultDataDir = path.resolve('data');
+const PUBLIC_DATA_DIR = (config.dataDir === '.' && fs.existsSync(defaultDataDir))
+  ? defaultDataDir
+  : path.resolve(config.dataDir);
 
 function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
