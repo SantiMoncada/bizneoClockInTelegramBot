@@ -1,0 +1,22 @@
+[package]
+name = "bizneo_clockin_telegram_bot"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "bizneo_clockin_telegram_bot"
+path = "rust-src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+dotenvy = "0.15"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+scraper = "0.20"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+teloxide = { version = "0.13", features = ["rustls", "ctrlc_handler"] }
+tokio = { version = "1.43", features = ["macros", "rt-multi-thread", "time", "signal"] }
+uuid = { version = "1.12", features = ["v4", "serde"] }
