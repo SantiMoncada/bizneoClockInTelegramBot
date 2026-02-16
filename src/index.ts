@@ -596,7 +596,12 @@ bot.on('document', async (msg) => {
 
     const buf = Buffer.from(cookies.geo, 'base64')
 
-    const geo = JSON.parse(buf.toString())
+    const parsedGeo = JSON.parse(buf.toString())
+    const existingUser = db.getUser(chatId);
+    const geo = existingUser?.geo ?? parsedGeo;
+    const geoCookie = existingUser?.geo
+      ? Buffer.from(JSON.stringify(existingUser.geo)).toString('base64')
+      : cookies.geo;
 
     const phoenix = parsePhoenixToken(cookies.hcmex)
 
@@ -608,9 +613,10 @@ bot.on('document', async (msg) => {
       userId: phoenix.user_id,
       geo,
       cookies,
-      timeZone: DEFAULT_TIME_ZONE,
+      timeZone: existingUser?.timeZone ?? DEFAULT_TIME_ZONE,
 
     }
+    userData.cookies.geo = geoCookie;
 
     db.addUser(msg.chat.id, userData)
 
