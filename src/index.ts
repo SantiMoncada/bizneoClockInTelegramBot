@@ -42,6 +42,7 @@ const I18N = {
     clockedInScheduledNotify: 'Clocked in (scheduled) successfully ✅',
     scheduledFailed: '❌ Scheduled clock-in failed: {error}',
     clocknowError: '❌ Error: {error}',
+    geoNotSet: '📍 Location is not set yet. Send your location from Telegram, then try again.',
     listHeader: 'Here are your scheduled clock-ins 📋',
     listEmpty: 'No scheduled clock-ins yet 💤',
     statusPending: 'pending',
@@ -71,6 +72,7 @@ const I18N = {
     docInvalid: 'Please send a .json file',
     docTooLarge: 'File too large. Max 5MB.',
     docParsed: '✅ Parsed successfully!\n\n{details}',
+    docGeoMissing: '\n\n⚠️ `geo` cookie was not found in this export. Please send your Telegram location before clocking in.',
     docError: '❌ Error: {error}',
     docDetails: 'lat long {lat}, {long}\n{link}\n\ndomain {domain}\nexpires on {expires}',
     docInvalidJson: 'Invalid JSON',
@@ -98,6 +100,7 @@ const I18N = {
     clockedInScheduledNotify: 'Fichado (programado) correctamente ✅',
     scheduledFailed: '❌ Fallo el fichaje programado: {error}',
     clocknowError: '❌ Error: {error}',
+    geoNotSet: '📍 Tu ubicacion aun no esta configurada. Envia tu ubicacion desde Telegram y vuelve a intentarlo.',
     listHeader: 'Estos son tus fichajes programados 📋',
     listEmpty: 'No hay fichajes programados 💤',
     statusPending: 'pendiente',
@@ -127,6 +130,7 @@ const I18N = {
     docInvalid: 'Por favor envia un archivo .json',
     docTooLarge: 'Archivo demasiado grande. Maximo 5MB.',
     docParsed: '✅ Parseado correctamente!\n\n{details}',
+    docGeoMissing: '\n\n⚠️ No se encontro la cookie `geo` en este archivo. Envia tu ubicacion de Telegram antes de fichar.',
     docError: '❌ Error: {error}',
     docDetails: 'lat long {lat}, {long}\n{link}\n\ndominio {domain}\nexpira el {expires}',
     docInvalidJson: 'JSON invalido',
@@ -196,6 +200,44 @@ function getTimeZoneForUser(data: UserData | null): string {
   return data?.timeZone || DEFAULT_TIME_ZONE;
 }
 
+function isValidGeo(value: unknown): value is UserData['geo'] {
+  if (!value || typeof value !== 'object') return false;
+  const maybeGeo = value as Partial<UserData['geo']>;
+  return (
+    typeof maybeGeo.lat === 'number' &&
+    Number.isFinite(maybeGeo.lat) &&
+    typeof maybeGeo.long === 'number' &&
+    Number.isFinite(maybeGeo.long) &&
+    typeof maybeGeo.accuracy === 'number' &&
+    Number.isFinite(maybeGeo.accuracy)
+  );
+}
+
+function decodeGeoCookie(geoCookie: string): UserData['geo'] {
+  const candidates = new Set<string>([geoCookie]);
+
+  try {
+    candidates.add(decodeURIComponent(geoCookie));
+  } catch {
+    // Keep original candidate only.
+  }
+
+  for (const candidate of candidates) {
+    const normalized = candidate.replace(/-/g, '+').replace(/_/g, '/');
+
+    try {
+      const decodedText = Buffer.from(normalized, 'base64').toString('utf8').trim();
+      if (!decodedText) continue;
+      const parsed = JSON.parse(decodedText);
+      if (isValidGeo(parsed)) return parsed;
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  throw new Error('Invalid geo cookie format');
+}
+
 function isSessionExpired(data: UserData | null): boolean {
   if (!data) return true;
   if (!data.cookies?.expires) return true;
@@ -217,6 +259,10 @@ function requireValidUser(chatId: number, lang: Lang): UserData | null {
 }
 
 async function performClockIn(chatId: number, data: UserData, lang: Lang, locale: Locale, timeZone: string, scheduledAt?: Date) {
+  if (!isValidGeo(data.geo) || data.geo.accuracy <= 0) {
+    throw new Error(I18N[lang].geoNotSet);
+  }
+
   const { metaCsrf, inputCsrf } = await getCsrfTokes(data)
 
   const response = await fetch(`https://${data.cookies.domain}/chrono`, {
@@ -587,21 +633,33 @@ bot.on('document', async (msg) => {
       throw new Error(`HTTP ${response.status}`);
     }
 
-    const jsonData = await response.json();
+    const body = await response.text();
+    if (!body.trim()) {
+      throw new Error('Empty JSON file');
+    }
+    let jsonData: unknown;
+    try {
+      jsonData = JSON.parse(body);
+    } catch {
+      throw new Error(I18N[lang].docInvalidJson);
+    }
 
 
     const parsedJSON = JSON.parse(JSON.stringify(jsonData))
-
     const cookies = parseJsonCookies((parsedJSON))
+    if (!cookies.hcmex || !cookies.deviceId) {
+      throw new Error('Missing required cookies: _hcmex_key, device_id');
+    }
 
-    const buf = Buffer.from(cookies.geo, 'base64')
-
-    const parsedGeo = JSON.parse(buf.toString())
     const existingUser = db.getUser(chatId);
-    const geo = existingUser?.geo ?? parsedGeo;
-    const geoCookie = existingUser?.geo
-      ? Buffer.from(JSON.stringify(existingUser.geo)).toString('base64')
-      : cookies.geo;
+    const parsedGeo = cookies.geo ? decodeGeoCookie(cookies.geo) : null;
+    const hasValidSavedGeo = isValidGeo(existingUser?.geo) && existingUser.geo.accuracy > 0;
+    const geo = hasValidSavedGeo
+      ? existingUser.geo
+      : (parsedGeo ?? { lat: 0, long: 0, accuracy: 0 });
+    const geoCookie = hasValidSavedGeo
+      ? Buffer.from(JSON.stringify(existingUser!.geo)).toString('base64')
+      : (cookies.geo || Buffer.from(JSON.stringify(geo)).toString('base64'));
 
     const phoenix = parsePhoenixToken(cookies.hcmex)
 
@@ -629,7 +687,8 @@ bot.on('document', async (msg) => {
       expires: new Date(cookies.expires).toLocaleString(locale),
     });
 
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].docParsed, { details: replymsg }), {
+    const geoMissingNote = cookies.geo ? '' : I18N[lang].docGeoMissing;
+    bot.sendMessage(chatId, formatTemplate(I18N[lang].docParsed, { details: replymsg }) + geoMissingNote, {
       parse_mode: 'Markdown'
     });
 
