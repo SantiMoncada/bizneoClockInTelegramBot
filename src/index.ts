@@ -247,12 +247,12 @@ function isSessionExpired(data: UserData | null): boolean {
 function requireValidUser(chatId: number, lang: Lang): UserData | null {
   const data = db.getUser(chatId);
   if (!data) {
-    bot.sendMessage(chatId, I18N[lang].loginRequired);
+    void safeSendMessage(chatId, I18N[lang].loginRequired);
     return null;
   }
   if (isSessionExpired(data)) {
     db.removeUser(chatId);
-    bot.sendMessage(chatId, I18N[lang].sessionExpired);
+    void safeSendMessage(chatId, I18N[lang].sessionExpired);
     return null;
   }
   return data;
@@ -293,15 +293,15 @@ async function performClockIn(chatId: number, data: UserData, lang: Lang, locale
   if (!response.ok) {
     const errMsg = `HTTP ${response.status}`;
     if (!scheduledAt) {
-      bot.sendMessage(chatId, formatTemplate(I18N[lang].clocknowError, { error: errMsg }));
+      await safeSendMessage(chatId, formatTemplate(I18N[lang].clocknowError, { error: errMsg }));
     }
     throw new Error(errMsg);
   }
 
   if (scheduledAt) {
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].clockedInScheduled, { time: formatScheduleTime(scheduledAt, locale, timeZone) }));
+    await safeSendMessage(chatId, formatTemplate(I18N[lang].clockedInScheduled, { time: formatScheduleTime(scheduledAt, locale, timeZone) }));
   } else {
-    bot.sendMessage(chatId, I18N[lang].clockedInNow);
+    await safeSendMessage(chatId, I18N[lang].clockedInNow);
   }
 }
 
@@ -322,7 +322,7 @@ async function runScheduledTasks() {
       if (isSessionExpired(data)) {
         db.removeUser(task.userId);
         scheduler.markExecuted(task.id, "Session expired");
-        bot.sendMessage(task.userId, I18N[task.lang].sessionExpired);
+        await safeSendMessage(task.userId, I18N[task.lang].sessionExpired);
         continue;
       }
       try {
@@ -331,7 +331,7 @@ async function runScheduledTasks() {
       } catch (error) {
         scheduler.markExecuted(task.id, error instanceof Error ? error.message : String(error));
         const errMsg = error instanceof Error ? error.message : String(error);
-        bot.sendMessage(task.userId, formatTemplate(I18N[task.lang].scheduledFailed, { error: errMsg }));
+        await safeSendMessage(task.userId, formatTemplate(I18N[task.lang].scheduledFailed, { error: errMsg }));
       }
     }
   } finally {
@@ -341,11 +341,56 @@ async function runScheduledTasks() {
 
 const useWebhook = Boolean(config.webhookUrl);
 const usePolling = !useWebhook;
+const TELEGRAM_RETRY_DELAY_MS = 2_000;
+const TELEGRAM_MAX_RETRIES = 3;
 
 // Create bot instance
 const bot = new TelegramBot(config.telegramBotToken, {
   polling: usePolling,
 });
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getTelegramErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+
+  const maybeCode = 'code' in error ? error.code : undefined;
+  if (typeof maybeCode === 'string') return maybeCode;
+
+  const maybeCause = 'cause' in error ? error.cause : undefined;
+  if (maybeCause && typeof maybeCause === 'object' && 'code' in maybeCause && typeof maybeCause.code === 'string') {
+    return maybeCause.code;
+  }
+
+  return undefined;
+}
+
+function isTransientTelegramError(error: unknown): boolean {
+  const code = getTelegramErrorCode(error);
+  if (code && ['EAI_AGAIN', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED'].includes(code)) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return ['EAI_AGAIN', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED'].some((value) => message.includes(value));
+}
+
+async function safeSendMessage(chatId: number, text: string, options?: TelegramBot.SendMessageOptions) {
+  for (let attempt = 1; attempt <= TELEGRAM_MAX_RETRIES; attempt += 1) {
+    try {
+      return await bot.sendMessage(chatId, text, options);
+    } catch (error) {
+      const shouldRetry = isTransientTelegramError(error) && attempt < TELEGRAM_MAX_RETRIES;
+      console.error(`Telegram sendMessage failed for chat ${chatId} (attempt ${attempt}/${TELEGRAM_MAX_RETRIES})`, error);
+      if (!shouldRetry) return undefined;
+      await sleep(TELEGRAM_RETRY_DELAY_MS * attempt);
+    }
+  }
+
+  return undefined;
+}
 
 console.log(`Bot started in ${config.nodeEnv} mode`);
 console.log(`PORT=${config.port}`);
@@ -441,7 +486,7 @@ if (useWebhook) {
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   const lang = getLangFromMessage(msg);
-  bot.sendMessage(
+  void safeSendMessage(
     chatId,
     I18N[lang].start
   );
@@ -459,7 +504,7 @@ bot.onText(/\/clocknow/, async (msg, match) => {
     await performClockIn(chatId, data, lang, locale, timeZone);
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].clocknowError, { error: errMsg }));
+    await safeSendMessage(chatId, formatTemplate(I18N[lang].clocknowError, { error: errMsg }));
   }
 });
 
@@ -470,7 +515,7 @@ bot.onText(/\/clockin(?:\s+(.+))?/, (msg, match) => {
   const rawInput = match?.[1]?.trim();
 
   if (!rawInput) {
-    bot.sendMessage(chatId, I18N[lang].usageClockin);
+    void safeSendMessage(chatId, I18N[lang].usageClockin);
     return;
   }
 
@@ -479,7 +524,7 @@ bot.onText(/\/clockin(?:\s+(.+))?/, (msg, match) => {
 
   const parsed = parseClockTime(rawInput);
   if (!parsed) {
-    bot.sendMessage(chatId, I18N[lang].invalidClockin);
+    void safeSendMessage(chatId, I18N[lang].invalidClockin);
     return;
   }
 
@@ -487,7 +532,7 @@ bot.onText(/\/clockin(?:\s+(.+))?/, (msg, match) => {
   const scheduledTime = nextOccurrence(parsed.hours, parsed.minutes, timeZone);
   const task = scheduler.add(chatId, scheduledTime, lang, locale, timeZone);
 
-  bot.sendMessage(
+  void safeSendMessage(
     chatId,
     formatTemplate(I18N[lang].scheduledClockin, { time: formatScheduleTime(scheduledTime, locale, timeZone), id: task.id })
   );
@@ -501,12 +546,12 @@ bot.onText(/\/list/, (msg) => {
   const data = db.getUser(chatId);
   if (data && isSessionExpired(data)) {
     db.removeUser(chatId);
-    bot.sendMessage(chatId, I18N[lang].sessionExpired);
+    void safeSendMessage(chatId, I18N[lang].sessionExpired);
   }
   const fallbackTimeZone = getTimeZoneForUser(db.getUser(chatId));
 
   if (tasks.length === 0) {
-    bot.sendMessage(chatId, I18N[lang].listEmpty);
+    void safeSendMessage(chatId, I18N[lang].listEmpty);
     return;
   }
 
@@ -522,7 +567,7 @@ bot.onText(/\/list/, (msg) => {
     return `${statusEmoji} ${task.id} — ${formatScheduleTime(task.scheduledTime, timeLocale, timeZone)} (${statusLabel})`;
   });
 
-  bot.sendMessage(chatId, `${I18N[lang].listHeader}\n\n${lines.join('\n')}`);
+  void safeSendMessage(chatId, `${I18N[lang].listHeader}\n\n${lines.join('\n')}`);
 });
 
 bot.onText(/\/cancel(?:\s+(.+))?/, (msg, match) => {
@@ -531,7 +576,7 @@ bot.onText(/\/cancel(?:\s+(.+))?/, (msg, match) => {
   const rawArg = match?.[1]?.trim();
 
   if (!rawArg) {
-    bot.sendMessage(chatId, I18N[lang].cancelUsage);
+    void safeSendMessage(chatId, I18N[lang].cancelUsage);
     return;
   }
 
@@ -539,28 +584,28 @@ bot.onText(/\/cancel(?:\s+(.+))?/, (msg, match) => {
   if (rawArg.toLowerCase() === 'all') {
     const pending = tasks.filter((task) => task.status === 'pending');
     if (pending.length === 0) {
-      bot.sendMessage(chatId, I18N[lang].cancelAllNone);
+      void safeSendMessage(chatId, I18N[lang].cancelAllNone);
       return;
     }
     for (const task of pending) {
       scheduler.cancel(task.id);
     }
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].cancelAllOk, { count: pending.length }));
+    void safeSendMessage(chatId, formatTemplate(I18N[lang].cancelAllOk, { count: pending.length }));
     return;
   }
 
   const id = rawArg;
   const belongsToUser = tasks.some((task) => task.id === id);
   if (!belongsToUser) {
-    bot.sendMessage(chatId, I18N[lang].cancelNotFound);
+    void safeSendMessage(chatId, I18N[lang].cancelNotFound);
     return;
   }
 
   const cancelled = scheduler.cancel(id);
   if (cancelled) {
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].cancelOk, { id }));
+    void safeSendMessage(chatId, formatTemplate(I18N[lang].cancelOk, { id }));
   } else {
-    bot.sendMessage(chatId, I18N[lang].cancelFail);
+    void safeSendMessage(chatId, I18N[lang].cancelFail);
   }
 });
 
@@ -594,7 +639,7 @@ bot.onText(/\/data/, (msg, match) => {
       expires: new Date(data.cookies.expires).toLocaleString(locale),
     }),
   ].join('\n');
-  bot.sendMessage(chatId, reply);
+  void safeSendMessage(chatId, reply);
 });
 
 bot.onText(/\/location/, (msg) => {
@@ -605,7 +650,7 @@ bot.onText(/\/location/, (msg) => {
 
   const { lat, long } = data.geo;
   const link = `https://www.google.com/search?q=${lat.toFixed(6)}%2C+${long.toFixed(6)}`;
-  bot.sendMessage(chatId, link);
+  void safeSendMessage(chatId, link);
 });
 
 bot.on('document', async (msg) => {
@@ -615,12 +660,12 @@ bot.on('document', async (msg) => {
   const document = msg.document;
 
   if (!document?.file_name?.endsWith('.json')) {
-    bot.sendMessage(chatId, I18N[lang].docInvalid);
+    void safeSendMessage(chatId, I18N[lang].docInvalid);
     return;
   }
 
   if (document.file_size && document.file_size > 5 * 1024 * 1024) {
-    bot.sendMessage(chatId, I18N[lang].docTooLarge);
+    void safeSendMessage(chatId, I18N[lang].docTooLarge);
     return;
   }
 
@@ -688,14 +733,14 @@ bot.on('document', async (msg) => {
     });
 
     const geoMissingNote = cookies.geo ? '' : I18N[lang].docGeoMissing;
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].docParsed, { details: replymsg }) + geoMissingNote, {
+    await safeSendMessage(chatId, formatTemplate(I18N[lang].docParsed, { details: replymsg }) + geoMissingNote, {
       parse_mode: 'Markdown'
     });
 
   } catch (error) {
     console.error('Error processing JSON:', error);
     const errMsg = error instanceof Error ? error.message : I18N[lang].docInvalidJson;
-    bot.sendMessage(chatId, formatTemplate(I18N[lang].docError, { error: errMsg }));
+    await safeSendMessage(chatId, formatTemplate(I18N[lang].docError, { error: errMsg }));
   }
 });
 
@@ -708,7 +753,7 @@ bot.on('location', (msg) => {
 
   const data = db.getUser(chatId);
   if (!data) {
-    bot.sendMessage(chatId, I18N[lang].loginRequired);
+    void safeSendMessage(chatId, I18N[lang].loginRequired);
     return;
   }
 
@@ -732,7 +777,7 @@ bot.on('location', (msg) => {
   db.addUser(chatId, updatedUser);
 
   const link = `https://www.google.com/search?q=${updatedGeo.lat.toFixed(6)}%2C+${updatedGeo.long.toFixed(6)}`;
-  bot.sendMessage(chatId, formatTemplate(I18N[lang].locationUpdated, { link }));
+  void safeSendMessage(chatId, formatTemplate(I18N[lang].locationUpdated, { link }));
 });
 
 bot.onText(/\/setTimeZone(?:\s+(.+))?/i, (msg, match) => {
@@ -744,14 +789,14 @@ bot.onText(/\/setTimeZone(?:\s+(.+))?/i, (msg, match) => {
   if (!data) return;
 
   if (!rawTz) {
-    bot.sendMessage(chatId, I18N[lang].setTimeZoneUsage);
+    void safeSendMessage(chatId, I18N[lang].setTimeZoneUsage);
     return;
   }
 
   const tz = rawTz;
   const isValid = DateTime.now().setZone(tz).isValid;
   if (!isValid) {
-    bot.sendMessage(chatId, I18N[lang].setTimeZoneInvalid);
+    void safeSendMessage(chatId, I18N[lang].setTimeZoneInvalid);
     return;
   }
 
@@ -760,7 +805,7 @@ bot.onText(/\/setTimeZone(?:\s+(.+))?/i, (msg, match) => {
     timeZone: tz,
   };
   db.addUser(chatId, updatedUser);
-  bot.sendMessage(chatId, formatTemplate(I18N[lang].setTimeZoneOk, { tz }));
+  void safeSendMessage(chatId, formatTemplate(I18N[lang].setTimeZoneOk, { tz }));
 });
 
 
@@ -779,6 +824,10 @@ bot.on('message', (msg) => {
 // Error handling
 bot.on('polling_error', (error) => {
   console.error('Polling error:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
 });
 
 cron.schedule('*/5 * * * *', () => {
